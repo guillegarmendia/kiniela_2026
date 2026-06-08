@@ -1,8 +1,15 @@
 /* ============================================================
    KINIELA MUNDIAL 2026 — app.js
+   Main user-facing SPA — Supabase backend
    ============================================================ */
 
 'use strict';
+
+// ── Supabase Config ────────────────────────────────────────
+
+const SUPABASE_URL = 'https://opudnzjgyswwjpindeat.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_ZUhLIbEjBORppt2rSSLgSw_M_BI4aw0';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -50,49 +57,60 @@ const PLAYERS = [
   "AnsuFigui", "DaniTwangy", "Dudu", "XaviCarbu", "MarkusRashford", "BusiCusi"
 ];
 
-// Colors for player avatars (one per player, cycling)
 const PLAYER_COLORS = [
-  '#e63946','#f5c518','#2ecc71','#3498db','#9b59b6',
-  '#e67e22','#1abc9c','#e91e63','#00bcd4','#ff5722'
+  '#e63946', '#f5c518', '#2ecc71', '#3498db', '#9b59b6',
+  '#e67e22', '#1abc9c', '#e91e63', '#00bcd4', '#ff5722'
 ];
+
+// ── Player slug helpers ────────────────────────────────────
+
+function nameToSlug(name) {
+  return name.toLowerCase().replace(/\s+/g, '-');
+}
+
+const SLUG_TO_NAME = Object.fromEntries(PLAYERS.map(n => [nameToSlug(n), n]));
+
+function getPlayerFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('u') || '';
+}
+
+function selectPlayer(player) {
+  const slug = nameToSlug(player);
+  window.location.href = `?u=${slug}`;
+}
 
 // ── State ──────────────────────────────────────────────────
 
-let matchesData = null;   // raw from matches.json
-let playersData = null;   // raw from players.json
-let playersByEnglish = {}; // { "Mexico": [...jugadores] }
+let matchesData = null;        // from matches.json
+let playersData = null;        // from players.json
+let playersByEnglish = {};     // { "Spain": [{nombre, apellido},...] }
 
-let currentPlayer = '';
-let predictions = {};  // { "A-0": { sign, golesLocal, golesVisitante, firstScorer } }
-let groupPredictions = {}; // { "A": ["España","Brasil",...] }
+let currentPlayer = '';        // "Cole Garmer"
+let currentPlayerSlug = '';    // "cole-garmer"
+
+let predictions = {};          // { "A-0": { sign, golesLocal, golesVisitante, firstScorer, points } }
+let groupPredictions = {};     // { "A": ["España",...] }
+
+let matchResultsCache = {};    // { "A-0": { golesLocal, golesVisitante, firstScorer } }
+let groupResultsCache = {};    // { "A": ["España",...] }
+let playerPointsCache = {};    // { "cole-garmer": 42, ... }
 
 let activeTab = 'dashboard';
 let activeDateTab = null;
 let activeGroupTab = 'A';
-
 let countdownInterval = null;
 let badgeIntervals = [];
 
-// ── Helpers ────────────────────────────────────────────────
+// ── Madrid Time ────────────────────────────────────────────
 
-/**
- * Returns a Date whose numeric value can be compared against dates built
- * with new Date(year, month, day, h, m) — i.e. parseMatchDate() and
- * GROUPS_DEADLINE — by "pretending" Madrid local time is the system local time.
- * Both sides of every comparison use the same convention, so the math works
- * regardless of the user's actual timezone.
- */
 function nowInMadrid() {
-  const madridStr = new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' });
-  return new Date(madridStr);
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
 }
 
-function flag(team) {
-  return FLAG_MAP[team] || '🏳';
-}
+// ── Date / lock helpers ────────────────────────────────────
 
 function parseMatchDate(fecha, hora) {
-  // fecha: "11 jun", hora: "21:00"
   const parts = fecha.split(' ');
   const day = parseInt(parts[0], 10);
   const month = MONTH_MAP[parts[1].toLowerCase()] ?? 5;
@@ -111,30 +129,48 @@ function areGroupsLocked() {
 function msToCountdown(ms) {
   if (ms <= 0) return null;
   const totalSec = Math.floor(ms / 1000);
-  const days = Math.floor(totalSec / 86400);
+  const days  = Math.floor(totalSec / 86400);
   const hours = Math.floor((totalSec % 86400) / 3600);
-  const mins = Math.floor((totalSec % 3600) / 60);
-  const secs = totalSec % 60;
-  if (days > 0) return `${days}d ${hours}h ${mins}m`;
+  const mins  = Math.floor((totalSec % 3600) / 60);
+  const secs  = totalSec % 60;
+  if (days  > 0) return `${days}d ${hours}h ${mins}m`;
   if (hours > 0) return `${hours}h ${mins}m`;
   return `${mins}m ${secs}s`;
 }
 
 function getMatchLockStatus(fecha, hora, matchId) {
-  // Si el partido ya tiene resultado registrado por el admin, se muestra como finalizado
-  const results = JSON.parse(localStorage.getItem('kiniela_results') || '{}');
-  if (matchId && results[matchId]) return { locked: true, label: '✅ Finalizado', cls: 'badge-finished', finished: true };
+  // If the match has a recorded result it is finished
+  if (matchId && matchResultsCache[matchId]) {
+    return { locked: true, label: '✅ Finalizado', cls: 'badge-finished', finished: true };
+  }
 
   const kickoff = parseMatchDate(fecha, hora);
   const now = nowInMadrid();
   const diffMs = kickoff - now;
+
   if (now >= kickoff) return { locked: true, label: '🔒 Cerrado', cls: 'badge-closed' };
-  // If closing within 2 hours, show countdown
+
   if (diffMs < 2 * 3600 * 1000) {
     const cd = msToCountdown(diffMs);
     return { locked: false, label: `⏱ Cierra en ${cd}`, cls: 'badge-soon', live: true, lockTime: kickoff };
   }
+
   return { locked: false, label: '🟢 Abierto', cls: 'badge-open' };
+}
+
+// ── Generic helpers ────────────────────────────────────────
+
+function flag(team) {
+  return FLAG_MAP[team] || '🏳';
+}
+
+function getInitial(name) {
+  return name ? name.charAt(0).toUpperCase() : '?';
+}
+
+function playerColor(name) {
+  const idx = PLAYERS.indexOf(name);
+  return PLAYER_COLORS[idx >= 0 ? idx : 0];
 }
 
 function getSignLabel(sign, local, visitante) {
@@ -148,73 +184,134 @@ function getPositionLabel(pos) {
   return pos === 0 ? '1º' : pos === 1 ? '2º' : pos === 2 ? '3º' : '4º';
 }
 
-function getInitial(name) {
-  return name ? name.charAt(0).toUpperCase() : '?';
-}
+// ── Supabase data loading ──────────────────────────────────
 
-function loadStorage() {
-  currentPlayer = localStorage.getItem('kiniela_current_player') || '';
-  loadPlayerData();
-}
+async function loadSupabaseData() {
+  const queries = [
+    sb.from('match_results').select('*'),
+    sb.from('group_results').select('*'),
+    sb.from('player_points').select('*')
+  ];
 
-function loadPlayerData() {
-  if (!currentPlayer) { predictions = {}; groupPredictions = {}; return; }
-  try { predictions = JSON.parse(localStorage.getItem(`kiniela_predictions_${currentPlayer}`) || '{}'); } catch { predictions = {}; }
-  try { groupPredictions = JSON.parse(localStorage.getItem(`kiniela_groups_${currentPlayer}`) || '{}'); } catch { groupPredictions = {}; }
-}
+  if (currentPlayerSlug) {
+    queries.push(
+      sb.from('predictions').select('*').eq('player_id', currentPlayerSlug),
+      sb.from('group_predictions').select('*').eq('player_id', currentPlayerSlug)
+    );
+  }
 
-function saveStorage() {
-  if (!currentPlayer) return;
-  localStorage.setItem('kiniela_current_player', currentPlayer);
-  localStorage.setItem(`kiniela_predictions_${currentPlayer}`, JSON.stringify(predictions));
-  localStorage.setItem(`kiniela_groups_${currentPlayer}`, JSON.stringify(groupPredictions));
-}
+  const results = await Promise.all(queries);
+  const [matchRes, groupRes, ptsRes] = results;
+  const predRes = results[3] || null;
+  const grpPredRes = results[4] || null;
 
-function selectPlayer(player) {
-  currentPlayer = player;
-  localStorage.setItem('kiniela_current_player', player);
-  loadPlayerData();
-  initDefaultGroups();
-  updateHeader();
-  renderDashboard();
-}
-
-function initDefaultGroups() {
-  if (!matchesData) return;
-  Object.entries(matchesData.grupos).forEach(([grp, matches]) => {
-    if (!groupPredictions[grp]) {
-      const seen = [];
-      matches.forEach(m => {
-        if (!seen.includes(m.local)) seen.push(m.local);
-        if (!seen.includes(m.visitante)) seen.push(m.visitante);
-      });
-      groupPredictions[grp] = seen.slice(0, 4);
-    }
+  // match_results
+  matchResultsCache = {};
+  (matchRes.data || []).forEach(r => {
+    matchResultsCache[r.match_id] = {
+      golesLocal: r.goles_local,
+      golesVisitante: r.goles_visitante,
+      firstScorer: r.first_scorer
+    };
   });
-  saveStorage();
+
+  // group_results
+  groupResultsCache = {};
+  (groupRes.data || []).forEach(r => {
+    groupResultsCache[r.grupo] = r.positions;
+  });
+
+  // player_points
+  playerPointsCache = {};
+  (ptsRes.data || []).forEach(r => {
+    playerPointsCache[r.player_id] = r.total;
+  });
+
+  // predictions (current player only)
+  predictions = {};
+  if (predRes) {
+    (predRes.data || []).forEach(r => {
+      predictions[r.match_id] = {
+        sign: r.sign,
+        golesLocal: r.goles_local,
+        golesVisitante: r.goles_visitante,
+        firstScorer: r.first_scorer,
+        points: r.points
+      };
+    });
+  }
+
+  // group_predictions (current player only)
+  groupPredictions = {};
+  if (grpPredRes) {
+    (grpPredRes.data || []).forEach(r => {
+      groupPredictions[r.grupo] = r.positions;
+      if (r.evaluated && r.points) {
+        groupPredictions[r.grupo + '_points'] = r.points;
+        groupPredictions[r.grupo + '_evaluated'] = true;
+      }
+    });
+  }
 }
 
-function buildPlayersMap() {
-  playersByEnglish = {};
-  playersData.forEach(team => {
-    playersByEnglish[team.seleccion] = team.jugadores;
+// ── Saving predictions (optimistic — fire and forget) ──────
+
+function savePrediction(grupo, idx, update) {
+  const key = `${grupo}-${idx}`;
+  predictions[key] = { ...predictions[key], ...update };
+  const p = predictions[key];
+  sb.from('predictions').upsert({
+    player_id: currentPlayerSlug,
+    match_id: key,
+    sign: p.sign ?? null,
+    goles_local: p.golesLocal ?? null,
+    goles_visitante: p.golesVisitante ?? null,
+    first_scorer: p.firstScorer ?? null
+  }, { onConflict: 'player_id,match_id' }).then(({ error }) => {
+    if (error) console.error('savePrediction:', error);
   });
 }
 
-function getPlayers(spanishName) {
-  const en = TEAM_NAME_MAP[spanishName];
-  return playersByEnglish[en] || [];
+function saveGroupPrediction(grupo, positions) {
+  groupPredictions[grupo] = positions;
+  sb.from('group_predictions').upsert({
+    player_id: currentPlayerSlug,
+    grupo,
+    positions
+  }, { onConflict: 'player_id,grupo' }).then(({ error }) => {
+    if (error) console.error('saveGroupPrediction:', error);
+  });
+}
+
+// ── Key helpers ────────────────────────────────────────────
+
+function getGroupOrder(grupo) {
+  if (groupPredictions[grupo]) return groupPredictions[grupo];
+  const matches = matchesData?.grupos[grupo] || [];
+  const seen = [];
+  matches.forEach(m => {
+    if (!seen.includes(m.local)) seen.push(m.local);
+    if (!seen.includes(m.visitante)) seen.push(m.visitante);
+  });
+  return seen.slice(0, 4);
+}
+
+function getUserPoints() {
+  return playerPointsCache[currentPlayerSlug] || 0;
+}
+
+function getUserRankPosition() {
+  if (!currentPlayerSlug) return '—';
+  const sorted = PLAYERS
+    .map(n => ({ slug: nameToSlug(n), pts: playerPointsCache[nameToSlug(n)] || 0 }))
+    .sort((a, b) => b.pts - a.pts);
+  const idx = sorted.findIndex(e => e.slug === currentPlayerSlug);
+  return idx >= 0 ? idx + 1 : '—';
 }
 
 function getMatchPrediction(grupo, idx) {
   const key = `${grupo}-${idx}`;
   return predictions[key] || {};
-}
-
-function setMatchPrediction(grupo, idx, update) {
-  const key = `${grupo}-${idx}`;
-  predictions[key] = { ...predictions[key], ...update };
-  saveStorage();
 }
 
 function countPredictedMatches() {
@@ -225,7 +322,7 @@ function countPredictedMatches() {
 }
 
 function countGroupsOrdered() {
-  return Object.keys(groupPredictions).length;
+  return Object.keys(groupPredictions).filter(k => !k.includes('_')).length;
 }
 
 function countOpenMatches() {
@@ -261,15 +358,16 @@ function getUniqueDates() {
   return dates;
 }
 
-function getUserPoints() {
-  // Lee los puntos acumulados desde localStorage (escritos por admin.js)
-  if (!currentPlayer) return 0;
-  return parseInt(localStorage.getItem(`kiniela_total_points_${currentPlayer}`) || '0', 10);
+function buildPlayersMap() {
+  playersByEnglish = {};
+  playersData.forEach(team => {
+    playersByEnglish[team.seleccion] = team.jugadores;
+  });
 }
 
-function getUserRankPosition() {
-  // All players at 0 pts; current player is position 1 until real results are added
-  return currentPlayer ? PLAYERS.indexOf(currentPlayer) + 1 : '—';
+function getPlayers(spanishName) {
+  const en = TEAM_NAME_MAP[spanishName];
+  return playersByEnglish[en] || [];
 }
 
 // ── Tab Navigation ─────────────────────────────────────────
@@ -284,12 +382,12 @@ function switchTab(tabName) {
   if (btn) btn.classList.add('active');
 
   if (tabName === 'dashboard') renderDashboard();
-  if (tabName === 'partidos') renderPartidosTab();
-  if (tabName === 'grupos') renderGruposTab();
-  if (tabName === 'ranking') renderRankingTab();
+  if (tabName === 'partidos')  renderPartidosTab();
+  if (tabName === 'grupos')    renderGruposTab();
+  if (tabName === 'ranking')   renderRankingTab();
 }
 
-// ── Header ────────────────────────────────────────────────
+// ── Header ─────────────────────────────────────────────────
 
 function updateHeader() {
   const pts = getUserPoints();
@@ -299,7 +397,7 @@ function updateHeader() {
   document.getElementById('header-points').textContent = currentPlayer ? `${pts} pts` : '';
 }
 
-// ── Dashboard Tab ─────────────────────────────────────────
+// ── Dashboard Tab ──────────────────────────────────────────
 
 function renderDashboard() {
   updateHeader();
@@ -319,7 +417,8 @@ function renderDashboard() {
   const predictedCount = countPredictedMatches();
   if (predictedCount < openMatches && openMatches > 0) {
     alertPred.classList.remove('hidden');
-    alertPred.querySelector('.alert-text strong').textContent = `${openMatches - predictedCount} partido(s) sin pronosticar`;
+    alertPred.querySelector('.alert-text strong').textContent =
+      `${openMatches - predictedCount} partido(s) sin pronosticar`;
   } else {
     alertPred.classList.add('hidden');
   }
@@ -341,10 +440,13 @@ function renderDashboard() {
   // Next 3 unlocked upcoming matches
   const allMatches = getAllMatchesSorted();
   const now = nowInMadrid();
-  const upcoming = allMatches.filter(m => m.date > now && !isMatchLocked(m.fecha, m.hora)).slice(0, 3);
+  const upcoming = allMatches
+    .filter(m => m.date > now && !isMatchLocked(m.fecha, m.hora))
+    .slice(0, 3);
   const nextMatchesEl = document.getElementById('next-matches');
   if (upcoming.length === 0) {
-    nextMatchesEl.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>No hay próximos partidos abiertos</p></div>';
+    nextMatchesEl.innerHTML =
+      '<div class="empty-state"><div class="empty-icon">✅</div><p>No hay próximos partidos abiertos</p></div>';
   } else {
     nextMatchesEl.innerHTML = upcoming.map(m => `
       <div class="mini-match-card" data-tab="partidos" data-fecha="${m.fecha}" role="button" tabindex="0">
@@ -373,11 +475,11 @@ function renderDashboard() {
 
   // Stats
   document.getElementById('stat-predicted').textContent = countPredictedMatches();
-  document.getElementById('stat-groups').textContent = countGroupsOrdered();
-  document.getElementById('stat-open').textContent = countOpenMatches();
+  document.getElementById('stat-groups').textContent    = countGroupsOrdered();
+  document.getElementById('stat-open').textContent      = countOpenMatches();
 }
 
-// ── Partidos Tab ──────────────────────────────────────────
+// ── Partidos Tab ───────────────────────────────────────────
 
 function renderPartidosTab() {
   renderDateTabs();
@@ -388,10 +490,8 @@ function renderDateTabs() {
   const container = document.getElementById('date-tabs');
   container.innerHTML = '';
 
-  // default: first date with open matches, or first date
   if (!activeDateTab || !dates.includes(activeDateTab)) {
     const allM = getAllMatchesSorted();
-    const now = new Date();
     const firstOpen = allM.find(m => !isMatchLocked(m.fecha, m.hora));
     activeDateTab = firstOpen ? firstOpen.fecha : (dates[0] || null);
   }
@@ -413,13 +513,11 @@ function selectDateTab(fecha) {
     b.classList.toggle('active', b.textContent === fecha);
   });
   renderMatchesForDate(fecha);
-  // Scroll selected tab into view
   const active = document.querySelector('.date-tab.active');
   if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 }
 
 function renderMatchesForDate(fecha) {
-  // Clear old badge intervals
   badgeIntervals.forEach(id => clearInterval(id));
   badgeIntervals = [];
 
@@ -429,7 +527,8 @@ function renderMatchesForDate(fecha) {
   container.innerHTML = '';
 
   if (filtered.length === 0) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>Sin partidos este día</p></div>';
+    container.innerHTML =
+      '<div class="empty-state"><div class="empty-icon">📭</div><p>Sin partidos este día</p></div>';
     return;
   }
 
@@ -441,11 +540,11 @@ function renderMatchesForDate(fecha) {
 
 function renderMatchCard(m) {
   const { grupo, idx, local, visitante, fecha, hora } = m;
-  const pred = getMatchPrediction(grupo, idx);
+  const pred   = getMatchPrediction(grupo, idx);
   const status = getMatchLockStatus(fecha, hora, m.id);
   const locked = status.locked;
 
-  const localPlayers = getPlayers(local);
+  const localPlayers    = getPlayers(local);
   const visitantePlayers = getPlayers(visitante);
   const allPlayers = [...localPlayers, ...visitantePlayers];
 
@@ -453,7 +552,7 @@ function renderMatchCard(m) {
   card.className = 'match-card';
   card.id = `card-${grupo}-${idx}`;
 
-  const scoreLoc = pred.golesLocal != null ? pred.golesLocal : null;
+  const scoreLoc = pred.golesLocal     != null ? pred.golesLocal     : null;
   const scoreVis = pred.golesVisitante != null ? pred.golesVisitante : null;
 
   card.innerHTML = `
@@ -489,12 +588,12 @@ function renderMatchCard(m) {
 
       <!-- Sign selector -->
       <div class="sign-row">
-        ${['1','X','2'].map(s => {
+        ${['1', 'X', '2'].map(s => {
           const labelText = s === '1' ? local : s === '2' ? visitante : 'Empate';
-          const isActive = pred.sign === s;
+          const isActive  = pred.sign === s;
           return `<button class="sign-btn${isActive ? ' active' : ''}" data-sign="${s}" data-grupo="${grupo}" data-idx="${idx}" ${locked ? 'disabled' : ''}>
             <span class="sign-key">${s}</span>
-            <span>${labelText.length > 10 ? labelText.substring(0,9)+'…' : labelText}</span>
+            <span>${labelText.length > 10 ? labelText.substring(0, 9) + '…' : labelText}</span>
           </button>`;
         }).join('')}
       </div>
@@ -525,17 +624,16 @@ function renderMatchCard(m) {
     </div>
   `;
 
-  // ── Desglose de puntos (solo si el partido está finalizado y evaluado) ──
-  const results = JSON.parse(localStorage.getItem('kiniela_results') || '{}');
-  const matchResult = results[m.id];
-  const predBreakdown = pred.points; // seteado por admin.js al puntuar
+  // Points breakdown (shown when match is finished and evaluated)
+  const matchResult  = matchResultsCache[m.id];
+  const predBreakdown = pred.points;
 
   if (matchResult && predBreakdown) {
     const realScorer = matchResult.firstScorer || 'Ninguno';
     const predScorer = pred.firstScorer || 'Ninguno';
+    const hit = (ok) => ok ? '✅' : '❌';
 
-    const hit  = (ok) => ok ? '✅' : '❌';
-    const row  = document.createElement('div');
+    const row = document.createElement('div');
     row.className = 'match-result-row';
     row.innerHTML = `
       <div class="result-row-real">
@@ -562,18 +660,19 @@ function renderMatchCard(m) {
   // Score buttons
   card.querySelectorAll('.score-btn').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (!currentPlayerSlug) return;
       const action = btn.dataset.action;
-      const team = btn.dataset.team;
-      const g = btn.dataset.grupo;
-      const i = parseInt(btn.dataset.idx, 10);
-      const p = getMatchPrediction(g, i);
-      const field = team === 'local' ? 'golesLocal' : 'golesVisitante';
+      const team   = btn.dataset.team;
+      const g      = btn.dataset.grupo;
+      const i      = parseInt(btn.dataset.idx, 10);
+      const p      = getMatchPrediction(g, i);
+      const field  = team === 'local' ? 'golesLocal' : 'golesVisitante';
       const dispId = team === 'local' ? `score-local-${g}-${i}` : `score-vis-${g}-${i}`;
-      const disp = document.getElementById(dispId);
-      let val = p[field] != null ? p[field] : (action === 'inc' ? -1 : 0);
+      const disp   = document.getElementById(dispId);
+      let val      = p[field] != null ? p[field] : (action === 'inc' ? -1 : 0);
       if (action === 'inc') val = Math.min(val + 1, 20);
       if (action === 'dec') val = Math.max(val - 1, 0);
-      setMatchPrediction(g, i, { [field]: val });
+      savePrediction(g, i, { [field]: val });
       if (disp) {
         disp.textContent = val;
         disp.classList.add('has-value');
@@ -585,13 +684,13 @@ function renderMatchCard(m) {
   // Sign buttons
   card.querySelectorAll('.sign-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const sign = btn.dataset.sign;
-      const g = btn.dataset.grupo;
-      const i = parseInt(btn.dataset.idx, 10);
+      if (!currentPlayerSlug) return;
+      const sign    = btn.dataset.sign;
+      const g       = btn.dataset.grupo;
+      const i       = parseInt(btn.dataset.idx, 10);
       const current = getMatchPrediction(g, i).sign;
       const newSign = current === sign ? null : sign;
-      setMatchPrediction(g, i, { sign: newSign });
-      // Update UI
+      savePrediction(g, i, { sign: newSign });
       card.querySelectorAll('.sign-btn').forEach(b => b.classList.remove('active'));
       if (newSign) btn.classList.add('active');
       updateDashboardStats();
@@ -602,7 +701,8 @@ function renderMatchCard(m) {
   const scorerSel = card.querySelector(`#scorer-${grupo}-${idx}`);
   if (scorerSel) {
     scorerSel.addEventListener('change', () => {
-      setMatchPrediction(grupo, idx, { firstScorer: scorerSel.value });
+      if (!currentPlayerSlug) return;
+      savePrediction(grupo, idx, { firstScorer: scorerSel.value });
     });
   }
 
@@ -615,8 +715,7 @@ function renderMatchCard(m) {
         if (ms <= 0) {
           clearInterval(id);
           badgeEl.textContent = '🔒 Cerrado';
-          badgeEl.className = 'match-status-badge badge-closed';
-          // Disable controls
+          badgeEl.className   = 'match-status-badge badge-closed';
           card.querySelectorAll('button, select').forEach(el => el.disabled = true);
         } else {
           const cd = msToCountdown(ms);
@@ -669,8 +768,8 @@ function renderGroupTabs() {
 
 function renderGroupContent(grupo) {
   const content = document.getElementById('group-content');
-  const teams = groupPredictions[grupo] || [];
-  const locked = areGroupsLocked();
+  const teams   = getGroupOrder(grupo);
+  const locked  = areGroupsLocked();
 
   content.innerHTML = `<div class="group-title">Grupo ${grupo}</div><div class="group-team-list" id="group-list-${grupo}"></div>`;
   const listEl = document.getElementById(`group-list-${grupo}`);
@@ -687,9 +786,9 @@ function renderGroupContent(grupo) {
 
 function createGroupTeamItem(grupo, team, idx, total, locked) {
   const item = document.createElement('div');
-  item.className = 'group-team-item';
+  item.className   = 'group-team-item';
   item.dataset.team = team;
-  item.dataset.idx = idx;
+  item.dataset.idx  = idx;
   if (!locked) {
     item.draggable = true;
     item.setAttribute('aria-grabbed', 'false');
@@ -700,8 +799,8 @@ function createGroupTeamItem(grupo, team, idx, total, locked) {
     <span class="group-flag">${flag(team)}</span>
     <span class="group-name">${team}</span>
     <div class="group-arrows">
-      <button class="arrow-btn" data-dir="up" ${idx === 0 || locked ? 'disabled' : ''} title="Subir">↑</button>
-      <button class="arrow-btn" data-dir="down" ${idx === total - 1 || locked ? 'disabled' : ''} title="Bajar">↓</button>
+      <button class="arrow-btn" data-dir="up"   ${idx === 0 || locked ? 'disabled' : ''} title="Subir">↑</button>
+      <button class="arrow-btn" data-dir="down"  ${idx === total - 1 || locked ? 'disabled' : ''} title="Bajar">↓</button>
     </div>
   `;
 
@@ -716,11 +815,14 @@ function createGroupTeamItem(grupo, team, idx, total, locked) {
 }
 
 function moveTeam(grupo, fromIdx, toIdx) {
-  const teams = [...groupPredictions[grupo]];
+  const teams = [...getGroupOrder(grupo)];
   if (toIdx < 0 || toIdx >= teams.length) return;
   [teams[fromIdx], teams[toIdx]] = [teams[toIdx], teams[fromIdx]];
-  groupPredictions[grupo] = teams;
-  saveStorage();
+  if (currentPlayerSlug) {
+    saveGroupPrediction(grupo, teams);
+  } else {
+    groupPredictions[grupo] = teams;
+  }
   renderGroupContent(grupo);
   updateDashboardStats();
 }
@@ -763,11 +865,14 @@ function setupDragDrop(listEl, grupo) {
     if (!item || dragSrcIdx === null) return;
     const destIdx = parseInt(item.dataset.idx, 10);
     if (dragSrcIdx !== destIdx) {
-      const teams = [...groupPredictions[grupo]];
+      const teams = [...getGroupOrder(grupo)];
       const moved = teams.splice(dragSrcIdx, 1)[0];
       teams.splice(destIdx, 0, moved);
-      groupPredictions[grupo] = teams;
-      saveStorage();
+      if (currentPlayerSlug) {
+        saveGroupPrediction(grupo, teams);
+      } else {
+        groupPredictions[grupo] = teams;
+      }
       renderGroupContent(grupo);
       updateDashboardStats();
     }
@@ -780,18 +885,16 @@ function setupDragDrop(listEl, grupo) {
 function renderRankingTab() {
   document.getElementById('ranking-hero-pos').textContent = currentPlayer ? `#${getUserRankPosition()}` : '—';
 
-  // Build leaderboard with all real players (0 pts until results come in)
   const entries = PLAYERS.map(name => ({
     name,
-    points: 0, // all start at 0; scoring will be implemented when results are added
+    points: playerPointsCache[nameToSlug(name)] || 0,
     me: name === currentPlayer
-  }));
-  entries.sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+  })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
 
   const lb = document.getElementById('leaderboard');
   lb.innerHTML = entries.map((e, i) => {
-    const rank = i + 1;
-    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+    const rank    = i + 1;
+    const medal   = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
     const rankCls = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
     return `
       <div class="leaderboard-row${e.me ? ' me' : ''}">
@@ -807,16 +910,16 @@ function renderRankingTab() {
   }).join('');
 }
 
-// ── Utility: update dashboard stats without full re-render ──
+// ── Dashboard stats (partial update) ──────────────────────
 
 function updateDashboardStats() {
   if (activeTab !== 'dashboard') return;
   document.getElementById('stat-predicted').textContent = countPredictedMatches();
-  document.getElementById('stat-groups').textContent = countGroupsOrdered();
-  document.getElementById('stat-open').textContent = countOpenMatches();
+  document.getElementById('stat-groups').textContent    = countGroupsOrdered();
+  document.getElementById('stat-open').textContent      = countOpenMatches();
 }
 
-// ── Global Countdown (header) ──────────────────────────────
+// ── Global Countdown ───────────────────────────────────────
 
 function startGlobalCountdown() {
   if (countdownInterval) clearInterval(countdownInterval);
@@ -824,8 +927,8 @@ function startGlobalCountdown() {
     if (activeTab === 'dashboard') {
       const alertGroups = document.getElementById('alert-groups');
       if (!areGroupsLocked() && !alertGroups.classList.contains('hidden')) {
-        const ms = GROUPS_DEADLINE - nowInMadrid();
-        const cd = msToCountdown(ms);
+        const ms  = GROUPS_DEADLINE - nowInMadrid();
+        const cd  = msToCountdown(ms);
         const span = document.getElementById('alert-groups-countdown');
         if (span) span.textContent = cd ? `Cierra en ${cd}` : '';
       }
@@ -869,7 +972,6 @@ function renderPlayerSelectorSection() {
     </div>
   `;
 
-  // Toggle grid on "Cambiar" click
   el.querySelector('#player-selector-toggle')?.addEventListener('click', (e) => {
     if (e.target.closest('.player-grid-btn')) return;
     const grid = el.querySelector('#player-grid');
@@ -880,12 +982,7 @@ function renderPlayerSelectorSection() {
   });
 }
 
-function playerColor(name) {
-  const idx = PLAYERS.indexOf(name);
-  return PLAYER_COLORS[idx >= 0 ? idx : 0];
-}
-
-// ── Boot ───────────────────────────────────────────────────
+// ── Boot ────────────────────────────────────────────────────
 
 function bootApp() {
   updateHeader();
@@ -915,24 +1012,24 @@ async function loadData() {
 // ── Entry Point ────────────────────────────────────────────
 
 async function main() {
-  loadStorage();
+  const slug = getPlayerFromURL();
+  if (slug && SLUG_TO_NAME[slug]) {
+    currentPlayer     = SLUG_TO_NAME[slug];
+    currentPlayerSlug = slug;
+  }
 
   try {
-    await loadData();
+    await Promise.all([loadData(), loadSupabaseData()]);
   } catch (err) {
-    console.error('Error loading data:', err);
+    console.error('Error:', err);
     document.body.innerHTML = `
       <div style="padding:40px;text-align:center;color:#e8eaf0;font-family:sans-serif;">
         <h2 style="color:#e63946">Error al cargar datos</h2>
-        <p>Asegúrate de lanzar la app con:</p>
-        <code style="background:#1e2538;padding:8px 16px;border-radius:8px;display:inline-block;margin-top:12px;color:#f5c518">
-          python3 -m http.server 3000
-        </code>
+        <p>Comprueba la conexión a internet.</p>
       </div>`;
     return;
   }
 
-  initDefaultGroups();
   bootApp();
 }
 
