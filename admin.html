@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Kiniela Mundial 2026</title>
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SECCIÓN DE LOGIN — visible por defecto hasta autenticarse
+       ══════════════════════════════════════════════════════════ -->
+  <div id="login-section">
+    <div class="login-card">
+      <div class="login-logo">
+        <span class="logo-ball">⚽</span>
+        <h1>Kiniela Mundial 2026</h1>
+        <p>Acceso restringido — solo administradores</p>
+      </div>
+
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label for="login-email">Correo electrónico</label>
+          <input
+            type="email"
+            id="login-email"
+            placeholder="admin@ejemplo.com"
+            autocomplete="email"
+            required
+          />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Contraseña</label>
+          <input
+            type="password"
+            id="login-password"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+        <button type="submit" class="btn-login">Entrar al panel</button>
+        <div id="login-error" class="login-error hidden">
+          Credenciales incorrectas. Inténtalo de nuevo.
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       PANEL DE ADMINISTRACIÓN — oculto hasta autenticarse
+       ══════════════════════════════════════════════════════════ -->
+  <div id="admin-panel" class="hidden">
+
+    <!-- Cabecera fija -->
+    <header class="admin-header">
+      <div class="admin-header-left">
+        <span class="header-icon">⚙️</span>
+        <h1>Panel Admin — Kiniela Mundial 2026</h1>
+      </div>
+      <button class="btn-logout" id="btn-logout">Cerrar sesión</button>
+    </header>
+
+    <!-- Pestañas de navegación -->
+    <div class="admin-tab-nav">
+      <button class="admin-tab-btn active" data-tab="partidos">⚽ Partidos</button>
+      <button class="admin-tab-btn" data-tab="grupos">📊 Grupos</button>
+    </div>
+
+    <!-- Contenido principal -->
+    <main class="admin-content">
+
+      <!-- ══════════════════════════════════════════════════════
+           TAB: PARTIDOS
+           ══════════════════════════════════════════════════════ -->
+      <div id="admin-tab-partidos" class="admin-tab-content active">
+
+      <!-- ── Tarjeta: Registrar resultado de partido ─────────── -->
+      <div class="admin-card">
+        <div class="admin-card-header">
+          <span class="card-icon">📋</span>
+          <h2>Registrar resultado de partido</h2>
+        </div>
+        <div class="admin-card-body">
+
+          <!-- Selector de partido -->
+          <div class="form-group">
+            <label for="match-select">Partido</label>
+            <select id="match-select">
+              <option value="">— Cargando partidos… —</option>
+            </select>
+          </div>
+
+          <!-- Fila de marcador -->
+          <div class="score-row">
+            <div class="form-group">
+              <label for="goals-local">
+                <span id="label-local" class="score-team-label">Equipo local</span>
+              </label>
+              <input
+                type="number"
+                id="goals-local"
+                min="0"
+                max="20"
+                placeholder="0"
+                value=""
+              />
+            </div>
+            <span class="score-sep">–</span>
+            <div class="form-group">
+              <label for="goals-visitor">
+                <span id="label-visitor" class="score-team-label">Equipo visitante</span>
+              </label>
+              <input
+                type="number"
+                id="goals-visitor"
+                min="0"
+                max="20"
+                placeholder="0"
+                value=""
+              />
+            </div>
+          </div>
+
+          <!-- Primer goleador -->
+          <div class="form-group">
+            <label for="first-scorer">Primer goleador</label>
+            <select id="first-scorer">
+              <option value="">Ninguno (0-0 o sin goles)</option>
+            </select>
+          </div>
+
+          <!-- Botón principal -->
+          <button class="btn-process" id="btn-process" disabled>
+            ⚡ Calcular y Repartir Puntos
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Tarjeta: Resultados del cálculo ─────────────────── -->
+      <div class="admin-card hidden" id="results-card">
+        <div class="admin-card-header">
+          <span class="card-icon">🏆</span>
+          <h2>Puntos repartidos</h2>
+        </div>
+        <div class="admin-card-body">
+          <div id="results-summary" class="results-summary">
+            <!-- Se rellena dinámicamente tras procesar -->
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Tarjeta: Historial de partidos finalizados ───────── -->
+      <div class="admin-card">
+        <div class="admin-card-header">
+          <span class="card-icon">📜</span>
+          <h2>Historial de partidos finalizados</h2>
+        </div>
+        <div class="admin-card-body">
+          <div id="history-list" class="history-list"></div>
+        </div>
+      </div>
+
+      </div><!-- /admin-tab-partidos -->
+
+      <!-- ══════════════════════════════════════════════════════
+           TAB: GRUPOS
+           ══════════════════════════════════════════════════════ -->
+      <div id="admin-tab-grupos" class="admin-tab-content">
+
+        <!-- ── Tarjeta: Cerrar clasificación de grupo ──────── -->
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <span class="card-icon">📊</span>
+            <h2>Cerrar clasificación de grupo</h2>
+          </div>
+          <div class="admin-card-body">
+
+            <div class="form-group">
+              <label for="group-select">Grupo</label>
+              <select id="group-select">
+                <option value="">— Selecciona un grupo —</option>
+              </select>
+            </div>
+
+            <!-- Los 4 puestos — se muestran al elegir grupo -->
+            <div id="group-positions" class="hidden">
+              <div class="positions-grid">
+                <div class="form-group">
+                  <label>🥇 1º puesto</label>
+                  <select id="pos-1"><option value="">— Equipo —</option></select>
+                </div>
+                <div class="form-group">
+                  <label>🥈 2º puesto</label>
+                  <select id="pos-2"><option value="">— Equipo —</option></select>
+                </div>
+                <div class="form-group">
+                  <label>🥉 3º puesto</label>
+                  <select id="pos-3"><option value="">— Equipo —</option></select>
+                </div>
+                <div class="form-group">
+                  <label>4️⃣ 4º puesto</label>
+                  <select id="pos-4"><option value="">— Equipo —</option></select>
+                </div>
+              </div>
+              <button class="btn-process" id="btn-group-process">
+                🏆 Cerrar Grupo y Repartir Puntos
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ── Tarjeta: Resultados del cálculo de grupos ────── -->
+        <div class="admin-card hidden" id="group-results-card">
+          <div class="admin-card-header">
+            <span class="card-icon">🏆</span>
+            <h2>Puntos de grupo repartidos</h2>
+          </div>
+          <div class="admin-card-body">
+            <div id="group-results-summary" class="results-summary"></div>
+          </div>
+        </div>
+
+        <!-- ── Tarjeta: Historial de grupos cerrados ─────────── -->
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <span class="card-icon">📜</span>
+            <h2>Historial de grupos cerrados</h2>
+          </div>
+          <div class="admin-card-body">
+            <div id="group-history-list" class="history-list"></div>
+          </div>
+        </div>
+
+      </div><!-- /admin-tab-grupos -->
+
+    </main>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       MODAL DE CONFIRMACIÓN
+       ══════════════════════════════════════════════════════════ -->
+  <div id="confirm-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-icon">⚠️</div>
+      <h3>¿Confirmar acción?</h3>
+      <p>Esto repartirá puntos a todos los participantes y marcará el partido como <strong>Finalizado</strong>.</p>
+      <p>Si el partido ya había sido evaluado anteriormente, los puntos previos serán corregidos automáticamente.</p>
+      <div class="modal-match-preview" id="modal-match-preview">
+        <!-- partido y resultado se insertan aquí -->
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="btn-modal-cancel">Cancelar</button>
+        <button class="btn-confirm" id="btn-modal-confirm">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast de notificación -->
+  <div id="toast" class="toast"></div>
+
+  <script src="admin.js"></script>
+</body>
+</html>

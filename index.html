@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Kiniela Mundial 2026</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- App Shell -->
+  <div id="app">
+
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-logo">
+        <span class="header-logo-icon">⚽</span>
+        <span class="header-logo-text">Kiniela <strong>2026</strong></span>
+      </div>
+      <div class="header-user" id="header-user">
+        <span class="header-points" id="header-points">0 pts</span>
+        <div class="header-avatar" id="header-avatar">?</div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="main-content">
+
+      <!-- Tab: Dashboard -->
+      <section id="tab-dashboard" class="tab-section active">
+        <div class="section-inner">
+          <!-- Player Selector -->
+          <div id="player-selector-section" class="player-selector-section"></div>
+
+          <!-- Hero Card -->
+          <div class="hero-card">
+            <div class="hero-avatar" id="hero-avatar">?</div>
+            <div class="hero-info">
+              <div class="hero-name" id="hero-name">Usuario</div>
+              <div class="hero-meta">
+                <span class="hero-position" id="hero-position">#1 en el ranking</span>
+              </div>
+            </div>
+            <div class="hero-points-box">
+              <div class="hero-points-value" id="hero-points">0</div>
+              <div class="hero-points-label">puntos</div>
+            </div>
+          </div>
+
+          <!-- Alerts -->
+          <div id="alert-predictions" class="alert alert-warning hidden" role="button" tabindex="0">
+            <span class="alert-icon">⚠️</span>
+            <div class="alert-text">
+              <strong>Tienes partidos sin pronosticar</strong>
+              <span>Toca para ir a Partidos</span>
+            </div>
+            <span class="alert-arrow">›</span>
+          </div>
+
+          <div id="alert-groups" class="alert alert-info hidden" role="button" tabindex="0">
+            <span class="alert-icon">⏰</span>
+            <div class="alert-text">
+              <strong>Grupos cierran pronto</strong>
+              <span id="alert-groups-countdown"></span>
+            </div>
+            <span class="alert-arrow">›</span>
+          </div>
+
+          <!-- Next matches -->
+          <div class="section-header">
+            <h3>Próximos partidos</h3>
+          </div>
+          <div id="next-matches" class="next-matches"></div>
+
+          <!-- Stats grid -->
+          <div class="section-header">
+            <h3>Mis estadísticas</h3>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-value" id="stat-predicted">0</div>
+              <div class="stat-label">Pronosticados</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-groups">0</div>
+              <div class="stat-label">Grupos ordenados</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="stat-open">0</div>
+              <div class="stat-label">Partidos abiertos</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">12</div>
+              <div class="stat-label">Grupos totales</div>
+            </div>
+          </div>
+          <!-- Acceso admin -->
+          <div class="admin-access-row">
+            <a href="admin.html" class="admin-access-link">⚙️ Panel de administrador</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab: Partidos -->
+      <section id="tab-partidos" class="tab-section">
+        <div id="date-tabs-wrapper" class="date-tabs-wrapper">
+          <div id="date-tabs" class="date-tabs"></div>
+        </div>
+        <div id="matches-list" class="matches-list"></div>
+      </section>
+
+      <!-- Tab: Grupos -->
+      <section id="tab-grupos" class="tab-section">
+        <div id="grupos-banner" class="grupos-banner"></div>
+        <div id="group-tabs" class="group-tabs-row">
+          <div id="group-tab-list" class="group-tab-list"></div>
+        </div>
+        <div id="group-content" class="group-content"></div>
+      </section>
+
+      <!-- Tab: Ranking -->
+      <section id="tab-ranking" class="tab-section">
+        <div class="section-inner">
+          <div id="ranking-hero" class="ranking-hero">
+            <div class="ranking-hero-pos" id="ranking-hero-pos">#—</div>
+            <div class="ranking-hero-label">Tu posición</div>
+          </div>
+          <div class="section-header"><h3>Clasificación</h3></div>
+          <div id="leaderboard" class="leaderboard"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-tab="dashboard">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">Inicio</span>
+      </button>
+      <button class="nav-btn" data-tab="partidos">
+        <span class="nav-icon">⚽</span>
+        <span class="nav-label">Partidos</span>
+      </button>
+      <button class="nav-btn" data-tab="grupos">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">Grupos</span>
+      </button>
+      <button class="nav-btn" data-tab="ranking">
+        <span class="nav-icon">🏆</span>
+        <span class="nav-label">Ranking</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
