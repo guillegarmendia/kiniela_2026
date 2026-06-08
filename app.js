@@ -102,6 +102,9 @@ let activeGroupTab = 'A';
 let countdownInterval = null;
 let badgeIntervals = [];
 
+let unsavedMatchPreds = new Set();  // match IDs with unsaved changes (unused for dirty tracking, just for reference)
+let apuestasPlayer = '';  // slug of player selected in Apuestas tab
+
 // ── Madrid Time ────────────────────────────────────────────
 
 function nowInMadrid() {
@@ -254,33 +257,54 @@ async function loadSupabaseData() {
   }
 }
 
-// ── Saving predictions (optimistic — fire and forget) ──────
+// ── Saving predictions ─────────────────────────────────────
 
-function savePrediction(grupo, idx, update) {
+// Update prediction in memory only (no Supabase)
+function updatePrediction(grupo, idx, update) {
   const key = `${grupo}-${idx}`;
   predictions[key] = { ...predictions[key], ...update };
-  const p = predictions[key];
-  sb.from('predictions').upsert({
+}
+
+// Persist current prediction to Supabase (called from save button)
+async function persistPrediction(grupo, idx) {
+  if (!currentPlayerSlug) return;
+  const key = `${grupo}-${idx}`;
+  const p = predictions[key] || {};
+  const { error } = await sb.from('predictions').upsert({
     player_id: currentPlayerSlug,
     match_id: key,
     sign: p.sign ?? null,
     goles_local: p.golesLocal ?? null,
     goles_visitante: p.golesVisitante ?? null,
     first_scorer: p.firstScorer ?? null
-  }, { onConflict: 'player_id,match_id' }).then(({ error }) => {
-    if (error) console.error('savePrediction:', error);
-  });
+  }, { onConflict: 'player_id,match_id' });
+  if (error) throw error;
 }
 
-function saveGroupPrediction(grupo, positions) {
-  groupPredictions[grupo] = positions;
-  sb.from('group_predictions').upsert({
+// Persist group prediction to Supabase (called from save button)
+async function persistGroupPrediction(grupo) {
+  if (!currentPlayerSlug) return;
+  const positions = getGroupOrder(grupo);
+  const { error } = await sb.from('group_predictions').upsert({
     player_id: currentPlayerSlug,
     grupo,
     positions
-  }, { onConflict: 'player_id,grupo' }).then(({ error }) => {
-    if (error) console.error('saveGroupPrediction:', error);
-  });
+  }, { onConflict: 'player_id,grupo' });
+  if (error) throw error;
+  groupPredictions[grupo] = positions;
+}
+
+// Show saved feedback on a button
+function showSavedFeedback(btn) {
+  const orig = btn.innerHTML;
+  btn.innerHTML = '✅ Guardado';
+  btn.disabled = true;
+  btn.classList.add('btn-save-done');
+  setTimeout(() => {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+    btn.classList.remove('btn-save-done');
+  }, 2000);
 }
 
 // ── Key helpers ────────────────────────────────────────────
@@ -385,6 +409,7 @@ function switchTab(tabName) {
   if (tabName === 'partidos')  renderPartidosTab();
   if (tabName === 'grupos')    renderGruposTab();
   if (tabName === 'ranking')   renderRankingTab();
+  if (tabName === 'apuestas')  renderApuestasTab();
 }
 
 // ── Header ─────────────────────────────────────────────────
@@ -621,6 +646,8 @@ function renderMatchCard(m) {
       </div>
 
       ${locked ? '<div class="match-locked-note">🔒 Este partido está cerrado. No puedes modificar el pronóstico.</div>' : ''}
+      ${!locked && currentPlayerSlug ? `<button class="btn-save-pred" id="save-btn-${grupo}-${idx}">💾 Guardar apuesta</button>` : ''}
+      ${!locked && !currentPlayerSlug ? '<div class="match-locked-note">Selecciona un jugador para guardar apuestas</div>' : ''}
     </div>
   `;
 
@@ -672,7 +699,7 @@ function renderMatchCard(m) {
       let val      = p[field] != null ? p[field] : (action === 'inc' ? -1 : 0);
       if (action === 'inc') val = Math.min(val + 1, 20);
       if (action === 'dec') val = Math.max(val - 1, 0);
-      savePrediction(g, i, { [field]: val });
+      updatePrediction(g, i, { [field]: val });
       if (disp) {
         disp.textContent = val;
         disp.classList.add('has-value');
@@ -690,7 +717,7 @@ function renderMatchCard(m) {
       const i       = parseInt(btn.dataset.idx, 10);
       const current = getMatchPrediction(g, i).sign;
       const newSign = current === sign ? null : sign;
-      savePrediction(g, i, { sign: newSign });
+      updatePrediction(g, i, { sign: newSign });
       card.querySelectorAll('.sign-btn').forEach(b => b.classList.remove('active'));
       if (newSign) btn.classList.add('active');
       updateDashboardStats();
@@ -702,7 +729,7 @@ function renderMatchCard(m) {
   if (scorerSel) {
     scorerSel.addEventListener('change', () => {
       if (!currentPlayerSlug) return;
-      savePrediction(grupo, idx, { firstScorer: scorerSel.value });
+      updatePrediction(grupo, idx, { firstScorer: scorerSel.value });
     });
   }
 
@@ -724,6 +751,24 @@ function renderMatchCard(m) {
       }, 1000);
       badgeIntervals.push(id);
     }
+  }
+
+  // Save button
+  const saveBtn = card.querySelector(`#save-btn-${grupo}-${idx}`);
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '⏳ Guardando…';
+      try {
+        await persistPrediction(grupo, idx);
+        showSavedFeedback(saveBtn);
+        updateDashboardStats();
+      } catch (e) {
+        saveBtn.innerHTML = '❌ Error — reintentar';
+        saveBtn.disabled = false;
+        console.error('persistPrediction:', e);
+      }
+    });
   }
 
   return card;
@@ -771,7 +816,15 @@ function renderGroupContent(grupo) {
   const teams   = getGroupOrder(grupo);
   const locked  = areGroupsLocked();
 
-  content.innerHTML = `<div class="group-title">Grupo ${grupo}</div><div class="group-team-list" id="group-list-${grupo}"></div>`;
+  const saveBtnHtml = !locked && currentPlayerSlug
+    ? `<button class="btn-save-group" id="save-btn-group-${grupo}">💾 Guardar clasificación</button>`
+    : '';
+
+  content.innerHTML = `
+    <div class="group-title">Grupo ${grupo}</div>
+    <div class="group-team-list" id="group-list-${grupo}"></div>
+    ${saveBtnHtml}
+  `;
   const listEl = document.getElementById(`group-list-${grupo}`);
 
   teams.forEach((team, i) => {
@@ -781,6 +834,23 @@ function renderGroupContent(grupo) {
 
   if (!locked) {
     setupDragDrop(listEl, grupo);
+  }
+
+  const groupSaveBtn = document.getElementById(`save-btn-group-${grupo}`);
+  if (groupSaveBtn) {
+    groupSaveBtn.addEventListener('click', async () => {
+      groupSaveBtn.disabled = true;
+      groupSaveBtn.innerHTML = '⏳ Guardando…';
+      try {
+        await persistGroupPrediction(grupo);
+        showSavedFeedback(groupSaveBtn);
+        updateDashboardStats();
+      } catch (e) {
+        groupSaveBtn.innerHTML = '❌ Error — reintentar';
+        groupSaveBtn.disabled = false;
+        console.error('persistGroupPrediction:', e);
+      }
+    });
   }
 }
 
@@ -818,11 +888,7 @@ function moveTeam(grupo, fromIdx, toIdx) {
   const teams = [...getGroupOrder(grupo)];
   if (toIdx < 0 || toIdx >= teams.length) return;
   [teams[fromIdx], teams[toIdx]] = [teams[toIdx], teams[fromIdx]];
-  if (currentPlayerSlug) {
-    saveGroupPrediction(grupo, teams);
-  } else {
-    groupPredictions[grupo] = teams;
-  }
+  groupPredictions[grupo] = teams;
   renderGroupContent(grupo);
   updateDashboardStats();
 }
@@ -868,11 +934,7 @@ function setupDragDrop(listEl, grupo) {
       const teams = [...getGroupOrder(grupo)];
       const moved = teams.splice(dragSrcIdx, 1)[0];
       teams.splice(destIdx, 0, moved);
-      if (currentPlayerSlug) {
-        saveGroupPrediction(grupo, teams);
-      } else {
-        groupPredictions[grupo] = teams;
-      }
+      groupPredictions[grupo] = teams;
       renderGroupContent(grupo);
       updateDashboardStats();
     }
@@ -908,6 +970,158 @@ function renderRankingTab() {
       </div>
     `;
   }).join('');
+}
+
+// ── Apuestas Tab ───────────────────────────────────────────
+
+function renderApuestasTab() {
+  renderApuestasPlayerPicker();
+  if (apuestasPlayer) {
+    loadAndRenderApuestas(apuestasPlayer);
+  } else {
+    const content = document.getElementById('apuestas-content');
+    if (content) {
+      content.innerHTML = '<div class="empty-state"><div class="empty-icon">🎯</div><p>Selecciona un jugador para ver sus apuestas</p></div>';
+    }
+  }
+}
+
+function renderApuestasPlayerPicker() {
+  const picker = document.getElementById('apuestas-player-picker');
+  if (!picker) return;
+  picker.innerHTML = `
+    <div class="apuestas-picker-title">Ver apuestas de:</div>
+    <div class="apuestas-player-grid">
+      ${PLAYERS.map(p => {
+        const slug = nameToSlug(p);
+        const isSelected = slug === apuestasPlayer;
+        return `
+          <button class="apuestas-player-btn ${isSelected ? 'selected' : ''}"
+                  data-slug="${slug}" onclick="selectApuestasPlayer('${slug}')">
+            <div class="player-av-sm" style="background:${playerColor(p)}">${getInitial(p)}</div>
+            <span>${p}</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function selectApuestasPlayer(slug) {
+  apuestasPlayer = slug;
+  renderApuestasPlayerPicker();
+  loadAndRenderApuestas(slug);
+}
+
+async function loadAndRenderApuestas(playerSlug) {
+  const content = document.getElementById('apuestas-content');
+  if (!content) return;
+  content.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando apuestas…</p></div>';
+
+  try {
+    const [predsRes, groupPredsRes] = await Promise.all([
+      sb.from('predictions').select('*').eq('player_id', playerSlug),
+      sb.from('group_predictions').select('*').eq('player_id', playerSlug)
+    ]);
+
+    const matchPreds = {};
+    (predsRes.data || []).forEach(r => {
+      matchPreds[r.match_id] = {
+        sign: r.sign,
+        golesLocal: r.goles_local,
+        golesVisitante: r.goles_visitante,
+        firstScorer: r.first_scorer
+      };
+    });
+
+    const groupPreds = {};
+    (groupPredsRes.data || []).forEach(r => {
+      groupPreds[r.grupo] = r.positions;
+    });
+
+    renderApuestasContent(playerSlug, matchPreds, groupPreds);
+  } catch (e) {
+    content.innerHTML = '<div class="empty-state"><p>❌ Error al cargar apuestas</p></div>';
+    console.error('loadAndRenderApuestas:', e);
+  }
+}
+
+function renderApuestasContent(_playerSlug, matchPreds, groupPreds) {
+  const content = document.getElementById('apuestas-content');
+  if (!content || !matchesData) return;
+
+  const allMatches = getAllMatchesSorted();
+
+  // Build match predictions HTML
+  const matchRows = allMatches.map(m => {
+    const pred = matchPreds[m.id] || {};
+    const hasPred = pred.sign || pred.golesLocal != null || pred.golesVisitante != null;
+    if (!hasPred) return '';
+
+    const signLabel = pred.sign === '1' ? m.local : pred.sign === '2' ? m.visitante : pred.sign === 'X' ? 'Empate' : '—';
+    const signBadgeClass = pred.sign === '1' ? 'sign-1' : pred.sign === '2' ? 'sign-2' : 'sign-x';
+    const scoreStr = (pred.golesLocal != null && pred.golesVisitante != null)
+      ? `${pred.golesLocal} – ${pred.golesVisitante}`
+      : '— – —';
+
+    return `
+      <div class="apuesta-match-row">
+        <div class="apuesta-match-header">
+          <span class="match-group-badge">Grupo ${m.grupo}</span>
+          <span class="apuesta-match-date">${m.fecha} · ${m.hora}</span>
+        </div>
+        <div class="apuesta-match-teams-row">
+          <span>${flag(m.local)} ${m.local}</span>
+          <span class="apuesta-vs">vs</span>
+          <span>${m.visitante} ${flag(m.visitante)}</span>
+        </div>
+        <div class="apuesta-pred-row">
+          ${pred.sign ? `<span class="apuesta-sign-badge ${signBadgeClass}">${pred.sign} · ${signLabel}</span>` : ''}
+          <span class="apuesta-score-badge">${scoreStr}</span>
+          ${pred.firstScorer ? `<span class="apuesta-scorer-badge">⚡ ${pred.firstScorer}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }).filter(Boolean).join('');
+
+  // Build group predictions HTML
+  const groups = Object.keys(matchesData.grupos || {}).sort();
+  const groupCards = groups.map(g => {
+    const positions = groupPreds[g];
+    if (!positions || positions.length === 0) return '';
+    return `
+      <div class="apuesta-group-card">
+        <div class="apuesta-group-title">Grupo ${g}</div>
+        <div class="apuesta-group-teams">
+          ${positions.map((team, i) => `
+            <div class="apuesta-group-row">
+              <span class="group-pos">${getPositionLabel(i)}</span>
+              <span class="group-flag">${flag(team)}</span>
+              <span class="group-name">${team}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }).filter(Boolean).join('');
+
+  const totalMatchPreds = Object.keys(matchPreds).length;
+  const totalGroupPreds = Object.keys(groupPreds).length;
+
+  content.innerHTML = `
+    <div class="apuestas-stats-row">
+      <div class="apuestas-stat"><span>${totalMatchPreds}</span><small>Partidos</small></div>
+      <div class="apuestas-stat"><span>${totalGroupPreds}</span><small>Grupos</small></div>
+    </div>
+
+    <div class="section-header" style="margin-top:4px"><h3>Pronósticos de Partidos</h3></div>
+    ${matchRows || '<div class="empty-state" style="padding:20px 0"><p>Sin pronósticos de partidos guardados</p></div>'}
+
+    <div class="section-header" style="margin-top:16px"><h3>Clasificaciones de Grupos</h3></div>
+    <div class="apuesta-groups-grid">
+      ${groupCards || '<div class="empty-state" style="padding:20px 0"><p>Sin clasificaciones guardadas</p></div>'}
+    </div>
+  `;
 }
 
 // ── Dashboard stats (partial update) ──────────────────────

@@ -658,6 +658,128 @@ input, select { font-family: inherit; }
   font-weight: 700;
 }
 
+/* ── Save buttons (match card & group) ── */
+.btn-save-pred,
+.btn-save-group {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; margin-top: 14px;
+  padding: 11px 16px;
+  background: rgba(245,197,24,0.12);
+  border: 1.5px solid rgba(245,197,24,0.35);
+  border-radius: var(--radius-sm);
+  color: var(--accent); font-size: 14px; font-weight: 700;
+  transition: background var(--transition), border-color var(--transition);
+  cursor: pointer;
+}
+.btn-save-pred:hover:not(:disabled),
+.btn-save-group:hover:not(:disabled) {
+  background: rgba(245,197,24,0.22);
+  border-color: var(--accent);
+}
+.btn-save-pred:disabled,
+.btn-save-group:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-save-done {
+  background: rgba(46,204,113,0.15) !important;
+  border-color: var(--success) !important;
+  color: var(--success) !important;
+}
+
+/* ── Apuestas Tab ── */
+.apuestas-picker-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.apuestas-player-grid {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 8px; margin-bottom: 20px;
+}
+.apuestas-player-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 8px 4px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1.5px solid transparent;
+  transition: border-color var(--transition), background var(--transition);
+  font-size: 9px; color: var(--text-muted); text-align: center;
+  line-height: 1.2; cursor: pointer;
+}
+.apuestas-player-btn:hover { background: var(--card); border-color: var(--border); }
+.apuestas-player-btn.selected {
+  border-color: var(--accent); background: rgba(245,197,24,0.08);
+  color: var(--text);
+}
+
+.apuestas-stats-row {
+  display: flex; gap: 10px; margin-bottom: 16px;
+}
+.apuestas-stat {
+  flex: 1; text-align: center; padding: 12px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.apuestas-stat span { display: block; font-size: 28px; font-weight: 800; color: var(--accent); line-height: 1; }
+.apuestas-stat small { display: block; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+.apuesta-match-row {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.apuesta-match-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.apuesta-match-date { font-size: 11px; color: var(--text-muted); }
+.apuesta-match-teams-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; margin-bottom: 8px;
+}
+.apuesta-vs { color: var(--text-muted); font-size: 11px; }
+.apuesta-pred-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+}
+.apuesta-sign-badge {
+  font-size: 11px; font-weight: 700; padding: 3px 8px;
+  border-radius: 20px;
+}
+.sign-1 { background: rgba(46,204,113,0.15); color: var(--success); }
+.sign-2 { background: rgba(230,57,70,0.15); color: var(--accent2); }
+.sign-x { background: rgba(52,152,219,0.15); color: #3498db; }
+.apuesta-score-badge {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  padding: 2px 8px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 20px;
+}
+.apuesta-scorer-badge {
+  font-size: 11px; color: var(--text-muted); padding: 2px 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px;
+}
+
+.apuesta-groups-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px; margin-bottom: 24px;
+}
+.apuesta-group-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px;
+}
+.apuesta-group-title {
+  font-size: 14px; font-weight: 800; color: var(--accent);
+  margin-bottom: 8px;
+}
+.apuesta-group-teams { display: flex; flex-direction: column; gap: 5px; }
+.apuesta-group-row {
+  display: flex; align-items: center; gap: 6px; font-size: 11px;
+}
+.apuesta-group-row .group-pos { font-size: 11px; width: 20px; }
+.apuesta-group-row .group-flag { font-size: 16px; }
+.apuesta-group-row .group-name { font-size: 11px; }
+
+/* 5-button nav adjustment */
+@media (max-width: 380px) {
+  .nav-label { font-size: 9px; }
+  .nav-icon { font-size: 18px; }
+}
+
 /* ── Desktop centering ── */
 @media (min-width: 481px) {
   body { background: #050811; }
