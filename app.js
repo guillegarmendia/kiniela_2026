@@ -53,7 +53,7 @@ const FLAG_MAP = {
 };
 
 const PLAYERS = [
-  "Cold Garmer", "Luisgarrincha", "Alex Casadinho", "Guisermo Casadinho",
+  "Cold Garmer", "Luisgarrincha", "Alex Casadinho", "Guishermo Casadinho",
   "AnsuFigui", "DaniTwangy", "Dudu", "XaviCarbu", "MarkusRashford", "BusiCusi"
 ];
 

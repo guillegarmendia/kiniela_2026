@@ -21,7 +21,7 @@ const ADMIN_PASSWORD = 'kiniela2026';
 
 /* ── Jugadores de la kiniela ─────────────────────────────── */
 const PLAYERS = [
-  'Cold Garmer', 'Luisgarrincha', 'Alex Casadinho', 'Guisermo Casadinho',
+  'Cold Garmer', 'Luisgarrincha', 'Alex Casadinho', 'Guishermo Casadinho',
   'AnsuFigui', 'DaniTwangy', 'Dudu', 'XaviCarbu', 'MarkusRashford', 'BusiCusi'
 ];
 
