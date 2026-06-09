@@ -1073,9 +1073,10 @@ async function loadAndRenderApuestas(playerSlug) {
   content.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando apuestas…</p></div>';
 
   try {
-    const [predsRes, groupPredsRes] = await Promise.all([
+    const [predsRes, groupPredsRes, specPredRes] = await Promise.all([
       sb.from('predictions').select('*').eq('player_id', playerSlug),
-      sb.from('group_predictions').select('*').eq('player_id', playerSlug)
+      sb.from('group_predictions').select('*').eq('player_id', playerSlug),
+      sb.from('special_predictions').select('*').eq('player_id', playerSlug).maybeSingle()
     ]);
 
     const matchPreds = {};
@@ -1093,14 +1094,16 @@ async function loadAndRenderApuestas(playerSlug) {
       groupPreds[r.grupo] = r.positions;
     });
 
-    renderApuestasContent(playerSlug, matchPreds, groupPreds);
+    const specPreds = specPredRes?.data || {};
+
+    renderApuestasContent(playerSlug, matchPreds, groupPreds, specPreds);
   } catch (e) {
     content.innerHTML = '<div class="empty-state"><p>❌ Error al cargar apuestas</p></div>';
     console.error('loadAndRenderApuestas:', e);
   }
 }
 
-function renderApuestasContent(_playerSlug, matchPreds, groupPreds) {
+function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = {}) {
   const content = document.getElementById('apuestas-content');
   if (!content || !matchesData) return;
 
@@ -1162,10 +1165,28 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds) {
   const totalMatchPreds = Object.keys(matchPreds).length;
   const totalGroupPreds = Object.keys(groupPreds).length;
 
+  // Build special predictions HTML
+  const specialRows = SPECIAL_FIELDS.map(f => {
+    const val = specPreds[f.key];
+    if (!val) return '';
+    const result = specialResults?.[f.key] || null;
+    const correct = result && val === result;
+    const badgeClass = result ? (correct ? 'apuesta-esp-correct' : 'apuesta-esp-wrong') : '';
+    return `
+      <div class="apuesta-esp-row">
+        <span class="apuesta-esp-icon">${f.icon}</span>
+        <span class="apuesta-esp-label">${f.label}</span>
+        <span class="apuesta-esp-value ${badgeClass}">${val}${correct ? ' ✅' : result ? ' ❌' : ''}</span>
+      </div>
+    `;
+  }).filter(Boolean).join('');
+  const totalSpecialPreds = SPECIAL_FIELDS.filter(f => specPreds[f.key]).length;
+
   content.innerHTML = `
     <div class="apuestas-stats-row">
       <div class="apuestas-stat"><span>${totalMatchPreds}</span><small>Partidos</small></div>
       <div class="apuestas-stat"><span>${totalGroupPreds}</span><small>Grupos</small></div>
+      <div class="apuestas-stat"><span>${totalSpecialPreds}</span><small>Especiales</small></div>
     </div>
 
     <div class="section-header" style="margin-top:4px"><h3>Pronósticos de Partidos</h3></div>
@@ -1174,6 +1195,11 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds) {
     <div class="section-header" style="margin-top:16px"><h3>Clasificaciones de Grupos</h3></div>
     <div class="apuesta-groups-grid">
       ${groupCards || '<div class="empty-state" style="padding:20px 0"><p>Sin clasificaciones guardadas</p></div>'}
+    </div>
+
+    <div class="section-header" style="margin-top:16px"><h3>Apuestas Especiales</h3></div>
+    <div class="apuesta-esp-list">
+      ${specialRows || '<div class="empty-state" style="padding:20px 0"><p>Sin apuestas especiales guardadas</p></div>'}
     </div>
   `;
 }

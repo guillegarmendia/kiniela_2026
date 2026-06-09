@@ -754,6 +754,23 @@ input, select { font-family: inherit; }
   border-radius: 20px;
 }
 
+.apuesta-esp-list {
+  display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;
+}
+.apuesta-esp-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 14px;
+}
+.apuesta-esp-icon { font-size: 18px; flex-shrink: 0; }
+.apuesta-esp-label { font-size: 13px; color: var(--text-muted); flex: 1; }
+.apuesta-esp-value {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  text-align: right; max-width: 55%;
+}
+.apuesta-esp-correct { color: #00d4aa; }
+.apuesta-esp-wrong   { color: #ff6b6b; text-decoration: line-through; }
+
 .apuesta-groups-grid {
   display: grid; grid-template-columns: 1fr 1fr;
   gap: 10px; margin-bottom: 24px;
