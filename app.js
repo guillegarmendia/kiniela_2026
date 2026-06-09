@@ -37,6 +37,8 @@ const TEAM_NAME_MAP = {
   "Escocia": "Scotland"
 };
 
+
+
 const FLAG_MAP = {
   "México": "🇲🇽", "Sudáfrica": "🇿🇦", "Corea del Sur": "🇰🇷", "República Checa": "🇨🇿",
   "Canada": "🇨🇦", "Bosnia Herzegovina": "🇧🇦", "Qatar": "🇶🇦", "Suiza": "🇨🇭",
@@ -61,6 +63,19 @@ const PLAYER_COLORS = [
   '#e63946', '#f5c518', '#2ecc71', '#3498db', '#9b59b6',
   '#e67e22', '#1abc9c', '#e91e63', '#00bcd4', '#ff5722'
 ];
+
+const PLAYER_PINS = {
+  "Cold Garmer":         "0000",
+  "Luisgarrincha":       "4944",
+  "Alex Casadinho":      "2323",
+  "Guishermo Casadinho": "3232",
+  "AnsuFigui":           "5270",
+  "DaniTwangy":          "6767",
+  "Dudu":                "8923",
+  "XaviCarbu":           "1313",
+  "MarkusRashford":      "1021",
+  "BusiCusi":            "7943"
+};
 
 // ── Player slug helpers ────────────────────────────────────
 
@@ -1278,6 +1293,93 @@ function startGlobalCountdown() {
 
 // ── Player Selector ────────────────────────────────────────
 
+// ── PIN modal ───────────────────────────────────────────────
+
+let _pinPlayer = '';
+let _pinValue  = '';
+
+function showPinModal(playerName) {
+  _pinPlayer = playerName;
+  _pinValue  = '';
+
+  // Inject modal if not present
+  if (!document.getElementById('pin-modal')) {
+    const div = document.createElement('div');
+    div.id = 'pin-modal';
+    div.className = 'pin-overlay hidden';
+    div.innerHTML = `
+      <div class="pin-box">
+        <button class="pin-close" onclick="closePinModal()">✕</button>
+        <div class="pin-avatar" id="pin-avatar"></div>
+        <div class="pin-name" id="pin-name"></div>
+        <div class="pin-dots" id="pin-dots">
+          <span class="pin-dot" id="pd0"></span>
+          <span class="pin-dot" id="pd1"></span>
+          <span class="pin-dot" id="pd2"></span>
+          <span class="pin-dot" id="pd3"></span>
+        </div>
+        <div class="pin-error hidden" id="pin-error">PIN incorrecto</div>
+        <div class="pin-keypad">
+          ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k => `
+            <button class="pin-key ${k==='' ? 'pin-key-empty' : ''}"
+                    onclick="pinPress('${k}')"
+                    ${k==='' ? 'disabled' : ''}>${k}</button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+    document.body.appendChild(div);
+  }
+
+  document.getElementById('pin-avatar').style.cssText =
+    `background:${playerColor(playerName)}`;
+  document.getElementById('pin-avatar').textContent = getInitial(playerName);
+  document.getElementById('pin-name').textContent    = playerName;
+  _pinUpdateDots();
+  document.getElementById('pin-error').classList.add('hidden');
+  document.getElementById('pin-modal').classList.remove('hidden');
+}
+
+function closePinModal() {
+  document.getElementById('pin-modal')?.classList.add('hidden');
+  _pinValue = '';
+}
+
+function pinPress(k) {
+  if (k === '⌫') {
+    _pinValue = _pinValue.slice(0, -1);
+    document.getElementById('pin-error').classList.add('hidden');
+    _pinUpdateDots();
+    return;
+  }
+  if (_pinValue.length >= 4) return;
+  _pinValue += k;
+  _pinUpdateDots();
+  if (_pinValue.length === 4) {
+    if (_pinValue === PLAYER_PINS[_pinPlayer]) {
+      closePinModal();
+      selectPlayer(_pinPlayer);
+    } else {
+      document.getElementById('pin-error').classList.remove('hidden');
+      // shake + reset after short delay
+      const dots = document.getElementById('pin-dots');
+      dots.classList.add('pin-shake');
+      setTimeout(() => {
+        dots.classList.remove('pin-shake');
+        _pinValue = '';
+        _pinUpdateDots();
+      }, 600);
+    }
+  }
+}
+
+function _pinUpdateDots() {
+  for (let i = 0; i < 4; i++) {
+    const dot = document.getElementById(`pd${i}`);
+    if (dot) dot.classList.toggle('filled', i < _pinValue.length);
+  }
+}
+
 function renderPlayerSelectorSection() {
   const el = document.getElementById('player-selector-section');
   if (!el) return;
@@ -1300,7 +1402,7 @@ function renderPlayerSelectorSection() {
       <div class="player-grid" id="player-grid" ${!isExpanded ? 'style="display:none"' : ''}>
         ${PLAYERS.map(p => `
           <button class="player-grid-btn ${currentPlayer === p ? 'selected' : ''}"
-                  onclick="selectPlayer('${p}')">
+                  onclick="showPinModal('${p}')">
             <div class="player-av-lg" style="background:${playerColor(p)}">${getInitial(p)}</div>
             <span>${p}</span>
           </button>
