@@ -523,7 +523,8 @@ async function processMatch(matchId, result) {
       points:         existingRow.points
     } : {};
 
-    const breakdown = calcMatchPoints(pred, fullResult);
+    // Si el jugador no guardó ningún pronóstico, 0 puntos en todo
+    const breakdown = existingRow ? calcMatchPoints(pred, fullResult) : { sign: 0, golesLocal: 0, golesVisitante: 0, firstScorer: 0, total: 0 };
     let total = existingPts[slug] || 0;
 
     // Restar puntos previos si el partido ya había sido evaluado

@@ -104,6 +104,7 @@ let badgeIntervals = [];
 
 let unsavedMatchPreds = new Set();  // match IDs with unsaved changes (unused for dirty tracking, just for reference)
 let apuestasPlayer = '';  // slug of player selected in Apuestas tab
+let historicoCache = {};  // { matchId: predRows[] } — fetched on demand
 
 // ── Madrid Time ────────────────────────────────────────────
 
@@ -502,6 +503,9 @@ function renderDashboard() {
   document.getElementById('stat-predicted').textContent = countPredictedMatches();
   document.getElementById('stat-groups').textContent    = countGroupsOrdered();
   document.getElementById('stat-open').textContent      = countOpenMatches();
+
+  // Histórico
+  renderHistorico();
 }
 
 // ── Partidos Tab ───────────────────────────────────────────
@@ -1121,6 +1125,125 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds) {
     <div class="apuesta-groups-grid">
       ${groupCards || '<div class="empty-state" style="padding:20px 0"><p>Sin clasificaciones guardadas</p></div>'}
     </div>
+  `;
+}
+
+// ── Histórico ──────────────────────────────────────────────
+
+function renderHistorico() {
+  const el = document.getElementById('historico-list');
+  if (!el) return;
+
+  const finished = getAllMatchesSorted().filter(m => matchResultsCache[m.id]);
+
+  if (finished.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>Aún no hay partidos finalizados</p></div>';
+    return;
+  }
+
+  el.innerHTML = finished.map(m => {
+    const result = matchResultsCache[m.id];
+    return `
+      <div class="hist-match-row" id="hist-row-${m.id}">
+        <button class="hist-match-btn" onclick="toggleHistorico('${m.id}')">
+          <span class="hist-group-badge">Grupo ${m.grupo}</span>
+          <div class="hist-teams">
+            <span>${flag(m.local)} ${m.local}</span>
+            <strong class="hist-score">${result.golesLocal} – ${result.golesVisitante}</strong>
+            <span>${m.visitante} ${flag(m.visitante)}</span>
+          </div>
+          <span class="hist-date">${m.fecha}</span>
+          <span class="hist-chevron" id="chevron-${m.id}">›</span>
+        </button>
+        <div class="hist-detail hidden" id="hist-detail-${m.id}"></div>
+      </div>
+    `;
+  }).join('');
+}
+
+function toggleHistorico(matchId) {
+  const detail  = document.getElementById(`hist-detail-${matchId}`);
+  const chevron = document.getElementById(`chevron-${matchId}`);
+  if (!detail) return;
+
+  const isOpen = !detail.classList.contains('hidden');
+  if (isOpen) {
+    detail.classList.add('hidden');
+    if (chevron) chevron.textContent = '›';
+    return;
+  }
+
+  detail.classList.remove('hidden');
+  if (chevron) chevron.textContent = '↓';
+
+  if (historicoCache[matchId]) {
+    renderHistoricoDetail(matchId, historicoCache[matchId]);
+    return;
+  }
+
+  detail.innerHTML = '<div class="hist-loading">⏳ Cargando…</div>';
+
+  sb.from('predictions').select('*').eq('match_id', matchId).then(({ data, error }) => {
+    if (error || !data) {
+      detail.innerHTML = '<div class="hist-loading">❌ Error al cargar</div>';
+      return;
+    }
+    historicoCache[matchId] = data;
+    renderHistoricoDetail(matchId, data);
+  });
+}
+
+function renderHistoricoDetail(matchId, predRows) {
+  const detail = document.getElementById(`hist-detail-${matchId}`);
+  if (!detail) return;
+
+  const match  = getAllMatchesSorted().find(m => m.id === matchId);
+  const result = matchResultsCache[matchId];
+  if (!match || !result) return;
+
+  const predMap = {};
+  predRows.forEach(r => { predMap[r.player_id] = r; });
+
+  const rows = PLAYERS.map(name => {
+    const slug = nameToSlug(name);
+    const r    = predMap[slug];
+    const pts  = r?.points || null;
+    const total = pts?.total ?? 0;
+
+    const avatarHtml = `<div class="player-av-sm" style="background:${playerColor(name)}">${getInitial(name)}</div>`;
+
+    if (!r) {
+      return `
+        <div class="hist-player-row">
+          <div class="hist-player-id">${avatarHtml}<span class="hist-player-name-txt">${name}</span></div>
+          <span class="hist-no-pred">Sin apuesta</span>
+          <span class="hist-total-pts">0 pts</span>
+        </div>`;
+    }
+
+    const facets = [
+      { label: '1/X/2', ok: pts?.sign        > 0 },
+      { label: 'G.L',   ok: pts?.golesLocal   > 0 },
+      { label: 'G.V',   ok: pts?.golesVisitante > 0 },
+      { label: '⚡',    ok: pts?.firstScorer  > 0 },
+    ];
+
+    return `
+      <div class="hist-player-row">
+        <div class="hist-player-id">${avatarHtml}<span class="hist-player-name-txt">${name}</span></div>
+        <div class="hist-facets">
+          ${facets.map(f => `<span class="hist-facet ${f.ok ? 'ok' : 'no'}">${f.ok ? '✅' : '❌'} <span class="hist-facet-lbl">${f.label}</span></span>`).join('')}
+        </div>
+        <span class="hist-total-pts ${total > 0 ? 'has-pts' : ''}">${total} pts</span>
+      </div>`;
+  }).join('');
+
+  detail.innerHTML = `
+    <div class="hist-result-info">
+      <strong>${flag(match.local)} ${match.local} ${result.golesLocal}–${result.golesVisitante} ${match.visitante} ${flag(match.visitante)}</strong>
+      <span class="hist-scorer-chip">⚡ ${result.firstScorer || 'Ninguno'}</span>
+    </div>
+    <div class="hist-players-list">${rows}</div>
   `;
 }
 

@@ -785,3 +785,173 @@ input, select { font-family: inherit; }
   body { background: #050811; }
   #app { box-shadow: 0 0 80px rgba(0,0,0,0.7); border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
 }
+
+/* ── Histórico ── */
+.hist-match-row {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.hist-match-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  font-size: 13px;
+  transition: background var(--transition);
+}
+.hist-match-btn:hover { background: rgba(255,255,255,0.04); }
+
+.hist-group-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  background: rgba(245,197,24,0.12);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+.hist-teams {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.hist-score {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 0 4px;
+}
+
+.hist-date {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.hist-chevron {
+  flex-shrink: 0;
+  font-size: 18px;
+  color: var(--text-muted);
+  font-weight: 300;
+  transition: transform var(--transition);
+  margin-left: 2px;
+}
+
+.hist-loading {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.hist-detail {
+  border-top: 1px solid var(--border);
+}
+
+.hist-result-info {
+  padding: 10px 14px 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.hist-result-info strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.hist-scorer-chip {
+  background: rgba(245,197,24,0.1);
+  border: 1px solid rgba(245,197,24,0.25);
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.hist-players-list {
+  padding: 4px 0;
+}
+
+.hist-player-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(42,51,72,0.5);
+}
+.hist-player-row:last-child { border-bottom: none; }
+
+.hist-player-id {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.hist-player-name-txt {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hist-facets {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hist-facet {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.hist-facet-lbl {
+  color: var(--text-muted);
+}
+.hist-facet.ok .hist-facet-lbl { color: var(--success); }
+.hist-facet.no .hist-facet-lbl { color: var(--text-muted); opacity: 0.6; }
+
+.hist-no-pred {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.hist-total-pts {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 42px;
+  text-align: right;
+}
+.hist-total-pts.has-pts { color: var(--accent); }
