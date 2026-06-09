@@ -53,7 +53,7 @@ const FLAG_MAP = {
 };
 
 const PLAYERS = [
-  "Cole Garmer", "Luisgarrincha", "Alex Casadinho", "Guisermo Casadinho",
+  "Cold Garmer", "Luisgarrincha", "Alex Casadinho", "Guisermo Casadinho",
   "AnsuFigui", "DaniTwangy", "Dudu", "XaviCarbu", "MarkusRashford", "BusiCusi"
 ];
 
@@ -86,15 +86,15 @@ let matchesData = null;        // from matches.json
 let playersData = null;        // from players.json
 let playersByEnglish = {};     // { "Spain": [{nombre, apellido},...] }
 
-let currentPlayer = '';        // "Cole Garmer"
-let currentPlayerSlug = '';    // "cole-garmer"
+let currentPlayer = '';        // "Cold Garmer"
+let currentPlayerSlug = '';    // "cold-garmer"
 
 let predictions = {};          // { "A-0": { sign, golesLocal, golesVisitante, firstScorer, points } }
 let groupPredictions = {};     // { "A": ["España",...] }
 
 let matchResultsCache = {};    // { "A-0": { golesLocal, golesVisitante, firstScorer } }
 let groupResultsCache = {};    // { "A": ["España",...] }
-let playerPointsCache = {};    // { "cole-garmer": 42, ... }
+let playerPointsCache = {};    // { "cold-garmer": 42, ... }
 
 let activeTab = 'dashboard';
 let activeDateTab = null;
