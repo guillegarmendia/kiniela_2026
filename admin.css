@@ -791,3 +791,67 @@ input, select, textarea { font-family: inherit; }
   .score-sep { display: none; }
   .modal-actions { flex-direction: column; }
 }
+
+/* ── Especiales Admin ──────────────────────────────────────── */
+
+.esp-admin-player-row {
+  display: flex;
+  gap: 8px;
+  flex-direction: column;
+}
+
+.esp-admin-player-row select,
+#admin-tab-especiales select {
+  width: 100%;
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  color: #e8eaf0;
+  font-size: 14px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.esp-admin-results {
+  background: rgba(0,212,170,0.06);
+  border: 1px solid rgba(0,212,170,0.2);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 8px;
+}
+
+.esp-admin-result-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.esp-admin-result-row:last-child { border-bottom: none; }
+
+.esp-admin-pts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.esp-admin-pts-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #1a1a2e;
+  border-radius: 8px;
+}
+
+.esp-admin-pts-name { flex: 1; font-size: 14px; }
+
+.esp-admin-pts-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #888;
+  min-width: 48px;
+  text-align: right;
+}
+.esp-admin-pts-val.has-pts { color: #00d4aa; }
+

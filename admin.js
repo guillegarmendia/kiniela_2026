@@ -79,6 +79,8 @@ let storedResultsCache      = {};   // { "A-0": { golesLocal, golesVisitante, fi
 let storedGroupResultsCache = {};   // { "A": ["España",...] }
 let allPredictionsCache     = [];   // all rows from predictions table
 let allGroupPredsCache      = [];   // all rows from group_predictions table
+let allSpecialPredsCache    = [];   // all rows from special_predictions table
+let storedSpecialResults    = null; // row from special_results (id='final')
 
 // Pendientes de confirmación
 let pendingMatchId   = null;
@@ -132,11 +134,13 @@ function getPlayersForTeam(spanishName) {
  * desde Supabase en paralelo y actualiza los caches locales.
  */
 async function refreshAdminData() {
-  const [matchRes, groupRes, predRes, grpPredRes] = await Promise.all([
+  const [matchRes, groupRes, predRes, grpPredRes, specPredRes, specResRes] = await Promise.all([
     sb.from('match_results').select('*'),
     sb.from('group_results').select('*'),
     sb.from('predictions').select('*'),
-    sb.from('group_predictions').select('*')
+    sb.from('group_predictions').select('*'),
+    sb.from('special_predictions').select('*'),
+    sb.from('special_results').select('*').eq('id', 'final').maybeSingle()
   ]);
 
   // match_results → storedResultsCache
@@ -161,6 +165,12 @@ async function refreshAdminData() {
 
   // group_predictions → allGroupPredsCache (raw rows)
   allGroupPredsCache = grpPredRes.data || [];
+
+  // special_predictions → allSpecialPredsCache
+  allSpecialPredsCache = specPredRes.data || [];
+
+  // special_results → storedSpecialResults
+  storedSpecialResults = specResRes.data || null;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -205,6 +215,7 @@ async function showPanel() {
   populateGroupSelect();
   renderHistory();
   renderGroupHistory();
+  populateEspecialesSelects();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -261,7 +272,8 @@ function switchAdminTab(tabName) {
   document.querySelectorAll('.admin-tab-content').forEach(c =>
     c.classList.toggle('active', c.id === `admin-tab-${tabName}`)
   );
-  if (tabName === 'grupos') renderGroupHistory();
+  if (tabName === 'grupos')     renderGroupHistory();
+  if (tabName === 'especiales') renderEspecialesAdmin();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1095,6 +1107,190 @@ function toggleHistoryItem(id) {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   ESPECIALES — ADMIN
+   ═══════════════════════════════════════════════════════════ */
+
+const SPECIAL_FIELDS_ADMIN = [
+  { key: 'mvp',               type: 'player' },
+  { key: 'top_scorer',        type: 'player' },
+  { key: 'top_assister',      type: 'player' },
+  { key: 'golden_glove',      type: 'player' },
+  { key: 'revelation_team',   type: 'team'   },
+  { key: 'disappointment_team', type: 'team' }
+];
+
+function getAllTeamsSortedAdmin() {
+  const teams = new Set();
+  Object.values(matchesData?.grupos || {}).forEach(matches =>
+    matches.forEach(m => { teams.add(m.local); teams.add(m.visitante); })
+  );
+  return [...teams].sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+function populateEspecialesSelects() {
+  const teams = getAllTeamsSortedAdmin();
+  const teamOpts = '<option value="">— Selección —</option>' +
+    teams.map(t => `<option value="${t}">${t}</option>`).join('');
+
+  SPECIAL_FIELDS_ADMIN.forEach(f => {
+    if (f.type === 'team') {
+      const sel = document.getElementById(`adm-esp-sel-${f.key}`);
+      if (sel) {
+        sel.innerHTML = teamOpts;
+        if (storedSpecialResults?.[f.key]) sel.value = storedSpecialResults[f.key];
+      }
+    } else {
+      const teamSel = document.getElementById(`adm-esp-team-${f.key}`);
+      if (teamSel) {
+        teamSel.innerHTML = teamOpts;
+        // Pre-select team from stored result
+        if (storedSpecialResults?.[f.key]) {
+          const savedPlayer = storedSpecialResults[f.key];
+          for (const t of teams) {
+            const players = getPlayersForTeam(t);
+            if (players.some(p => `${p.nombre} ${p.apellido}` === savedPlayer)) {
+              teamSel.value = t;
+              adminSpecialTeamChange(f.key, savedPlayer);
+              break;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function adminSpecialTeamChange(fieldKey, preselectPlayer = null) {
+  const teamSel   = document.getElementById(`adm-esp-team-${fieldKey}`);
+  const playerSel = document.getElementById(`adm-esp-sel-${fieldKey}`);
+  if (!teamSel || !playerSel) return;
+  const team    = teamSel.value;
+  const players = team ? getPlayersForTeam(team) : [];
+  playerSel.innerHTML = '<option value="">— Jugador —</option>' +
+    players.map(p => {
+      const full = `${p.nombre} ${p.apellido}`;
+      return `<option value="${full}" ${preselectPlayer === full ? 'selected' : ''}>${full}</option>`;
+    }).join('');
+  playerSel.disabled = players.length === 0;
+}
+
+function renderEspecialesAdmin() {
+  // Re-populate selects with current stored values
+  populateEspecialesSelects();
+}
+
+async function processSpeciales() {
+  const btn = document.getElementById('btn-especiales-process');
+  btn.disabled = true;
+  btn.textContent = '⏳ Procesando…';
+
+  // Collect form values
+  const results = {};
+  SPECIAL_FIELDS_ADMIN.forEach(f => {
+    const sel = document.getElementById(`adm-esp-sel-${f.key}`);
+    results[f.key] = sel?.value || null;
+  });
+
+  // Validate at least one field
+  if (Object.values(results).every(v => !v)) {
+    showToast('Completa al menos un campo antes de guardar', 'error');
+    btn.disabled = false;
+    btn.textContent = '🌟 Guardar Resultados y Repartir Puntos';
+    return;
+  }
+
+  // 1. Save special_results
+  const { error: resErr } = await sb.from('special_results').upsert(
+    { id: 'final', ...results },
+    { onConflict: 'id' }
+  );
+  if (resErr) {
+    showToast('Error guardando resultados: ' + resErr.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '🌟 Guardar Resultados y Repartir Puntos';
+    return;
+  }
+  storedSpecialResults = results;
+
+  // 2. Reload all special_predictions + player_points
+  const [specPredsRes, ptsRes] = await Promise.all([
+    sb.from('special_predictions').select('*'),
+    sb.from('player_points').select('*')
+  ]);
+
+  const allSpecPreds = specPredsRes.data || [];
+  const ptsMap = {};
+  (ptsRes.data || []).forEach(r => { ptsMap[r.player_id] = r; });
+
+  // 3. Calculate special_total per player
+  const ptsUpserts = [];
+  const rowData    = [];
+
+  PLAYERS.forEach(name => {
+    const slug    = nameToSlug(name);
+    const pred    = allSpecPreds.find(r => r.player_id === slug) || {};
+    const current = ptsMap[slug] || { total: 0, special_total: 0 };
+
+    let specialPts = 0;
+    SPECIAL_FIELDS_ADMIN.forEach(f => {
+      if (results[f.key] && pred[f.key] && pred[f.key] === results[f.key]) {
+        specialPts += 3;
+      }
+    });
+
+    ptsUpserts.push({
+      player_id:     slug,
+      total:         current.total || 0,
+      special_total: specialPts
+    });
+
+    rowData.push({ name, specialPts, pred, results });
+  });
+
+  // 4. Write player_points
+  const { error: ptsErr } = await sb.from('player_points')
+    .upsert(ptsUpserts, { onConflict: 'player_id' });
+
+  if (ptsErr) {
+    showToast('Error actualizando puntos: ' + ptsErr.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '🌟 Guardar Resultados y Repartir Puntos';
+    return;
+  }
+
+  // 5. Render summary
+  const card    = document.getElementById('especiales-results-card');
+  const summary = document.getElementById('especiales-results-summary');
+  card.classList.remove('hidden');
+
+  const LABELS = {
+    mvp: '🏅 MVP', top_scorer: '⚽ Máx. Goleador', top_assister: '🎯 Máx. Asistente',
+    golden_glove: '🧤 Guante Oro', revelation_team: '🌟 Revelación', disappointment_team: '😞 Decepción'
+  };
+
+  summary.innerHTML = `
+    <div class="esp-admin-results">
+      <h4 style="margin:0 0 12px;color:var(--accent)">Resultados registrados</h4>
+      ${SPECIAL_FIELDS_ADMIN.map(f => results[f.key]
+        ? `<div class="esp-admin-result-row"><span>${LABELS[f.key]}</span><strong>${results[f.key]}</strong></div>`
+        : '').join('')}
+    </div>
+    <h4 style="margin:16px 0 10px">Puntos especiales por jugador</h4>
+    <div class="esp-admin-pts-list">
+      ${rowData.sort((a,b) => b.specialPts - a.specialPts).map(r => `
+        <div class="esp-admin-pts-row">
+          <div class="player-av-sm" style="background:${playerColor(r.name)}">${getInitial(r.name)}</div>
+          <span class="esp-admin-pts-name">${r.name}</span>
+          <span class="esp-admin-pts-val ${r.specialPts > 0 ? 'has-pts' : ''}">${r.specialPts} pts</span>
+        </div>`).join('')}
+    </div>`;
+
+  showToast('✅ Resultados especiales guardados y puntos actualizados', 'success');
+  btn.disabled = false;
+  btn.textContent = '🌟 Guardar Resultados y Repartir Puntos';
+}
+
+/* ═══════════════════════════════════════════════════════════
    TOAST DE NOTIFICACIÓN
    ═══════════════════════════════════════════════════════════ */
 
@@ -1130,6 +1326,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.admin-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchAdminTab(btn.dataset.tab));
   });
+
+  document.getElementById('btn-especiales-process').addEventListener('click', processSpeciales);
 
   document.getElementById('btn-modal-cancel').addEventListener('click', hideConfirmModal);
   document.getElementById('btn-modal-confirm').addEventListener('click', confirmProcess);

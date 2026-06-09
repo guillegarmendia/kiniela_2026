@@ -82,6 +82,7 @@
     <div class="admin-tab-nav">
       <button class="admin-tab-btn active" data-tab="partidos">⚽ Partidos</button>
       <button class="admin-tab-btn" data-tab="grupos">📊 Grupos</button>
+      <button class="admin-tab-btn" data-tab="especiales">🌟 Especiales</button>
     </div>
 
     <!-- Contenido principal -->
@@ -251,6 +252,110 @@
         </div>
 
       </div><!-- /admin-tab-grupos -->
+
+      <!-- ══════════════════════════════════════════════════════
+           TAB: ESPECIALES
+           ══════════════════════════════════════════════════════ -->
+      <div id="admin-tab-especiales" class="admin-tab-content">
+
+        <!-- Registrar ganadores -->
+        <div class="admin-card">
+          <div class="admin-card-header">
+            <span class="card-icon">🌟</span>
+            <h2>Registrar ganadores especiales</h2>
+          </div>
+          <div class="admin-card-body">
+            <p style="font-size:13px;color:#aaa;margin-bottom:16px;">
+              Selecciona los ganadores de cada categoría. Al pulsar el botón se calcularán
+              y actualizarán los puntos de todos los jugadores (3 pts por acierto).
+            </p>
+
+            <!-- MVP -->
+            <div class="form-group">
+              <label>🏅 MVP (mejor jugador)</label>
+              <div class="esp-admin-player-row">
+                <select id="adm-esp-team-mvp" onchange="adminSpecialTeamChange('mvp')">
+                  <option value="">— Selección —</option>
+                </select>
+                <select id="adm-esp-sel-mvp" disabled>
+                  <option value="">— Jugador —</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Máximo Goleador -->
+            <div class="form-group">
+              <label>⚽ Máximo Goleador</label>
+              <div class="esp-admin-player-row">
+                <select id="adm-esp-team-top_scorer" onchange="adminSpecialTeamChange('top_scorer')">
+                  <option value="">— Selección —</option>
+                </select>
+                <select id="adm-esp-sel-top_scorer" disabled>
+                  <option value="">— Jugador —</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Máximo Asistente -->
+            <div class="form-group">
+              <label>🎯 Máximo Asistente</label>
+              <div class="esp-admin-player-row">
+                <select id="adm-esp-team-top_assister" onchange="adminSpecialTeamChange('top_assister')">
+                  <option value="">— Selección —</option>
+                </select>
+                <select id="adm-esp-sel-top_assister" disabled>
+                  <option value="">— Jugador —</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Guante de Oro -->
+            <div class="form-group">
+              <label>🧤 Guante de Oro</label>
+              <div class="esp-admin-player-row">
+                <select id="adm-esp-team-golden_glove" onchange="adminSpecialTeamChange('golden_glove')">
+                  <option value="">— Selección —</option>
+                </select>
+                <select id="adm-esp-sel-golden_glove" disabled>
+                  <option value="">— Jugador —</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Selección Revelación -->
+            <div class="form-group">
+              <label>🌟 Selección Revelación</label>
+              <select id="adm-esp-sel-revelation_team">
+                <option value="">— Selección —</option>
+              </select>
+            </div>
+
+            <!-- Selección Decepción -->
+            <div class="form-group">
+              <label>😞 Selección Decepción</label>
+              <select id="adm-esp-sel-disappointment_team">
+                <option value="">— Selección —</option>
+              </select>
+            </div>
+
+            <button class="btn-process" id="btn-especiales-process">
+              🌟 Guardar Resultados y Repartir Puntos
+            </button>
+          </div>
+        </div>
+
+        <!-- Resultados del cálculo -->
+        <div class="admin-card hidden" id="especiales-results-card">
+          <div class="admin-card-header">
+            <span class="card-icon">🏆</span>
+            <h2>Puntos especiales repartidos</h2>
+          </div>
+          <div class="admin-card-body">
+            <div id="especiales-results-summary" class="results-summary"></div>
+          </div>
+        </div>
+
+      </div><!-- /admin-tab-especiales -->
 
     </main>
   </div>

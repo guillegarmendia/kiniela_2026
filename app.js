@@ -13,7 +13,8 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── Constants ──────────────────────────────────────────────
 
-const GROUPS_DEADLINE = new Date(2026, 5, 11, 21, 0, 0); // June 11 2026 21:00 Madrid time
+const GROUPS_DEADLINE   = new Date(2026, 5, 11, 21, 0, 0); // June 11 2026 21:00 Madrid time
+const SPECIAL_DEADLINE  = new Date(2026, 5, 11, 21, 0, 0); // same — first match kickoff
 
 const MONTH_MAP = {
   'ene': 0, 'feb': 1, 'mar': 2, 'abr': 3, 'may': 4, 'jun': 5,
@@ -121,6 +122,9 @@ let unsavedMatchPreds = new Set();  // match IDs with unsaved changes (unused fo
 let apuestasPlayer = '';  // slug of player selected in Apuestas tab
 let historicoCache = {};  // { matchId: predRows[] } — fetched on demand
 
+let specialPredictions = {}; // { mvp, top_scorer, top_assister, golden_glove, revelation_team, disappointment_team }
+let specialResults     = null; // same shape — actual winners set by admin
+
 // ── Madrid Time ────────────────────────────────────────────
 
 function nowInMadrid() {
@@ -143,6 +147,10 @@ function isMatchLocked(fecha, hora) {
 
 function areGroupsLocked() {
   return nowInMadrid() >= GROUPS_DEADLINE;
+}
+
+function areSpecialsLocked() {
+  return nowInMadrid() >= SPECIAL_DEADLINE;
 }
 
 function msToCountdown(ms) {
@@ -212,17 +220,21 @@ async function loadSupabaseData() {
     sb.from('player_points').select('*')
   ];
 
+  queries.push(sb.from('special_results').select('*').eq('id', 'final').maybeSingle());
+
   if (currentPlayerSlug) {
     queries.push(
       sb.from('predictions').select('*').eq('player_id', currentPlayerSlug),
-      sb.from('group_predictions').select('*').eq('player_id', currentPlayerSlug)
+      sb.from('group_predictions').select('*').eq('player_id', currentPlayerSlug),
+      sb.from('special_predictions').select('*').eq('player_id', currentPlayerSlug).maybeSingle()
     );
   }
 
   const results = await Promise.all(queries);
-  const [matchRes, groupRes, ptsRes] = results;
-  const predRes = results[3] || null;
-  const grpPredRes = results[4] || null;
+  const [matchRes, groupRes, ptsRes, specResRes] = results;
+  const predRes    = results[4] || null;
+  const grpPredRes = results[5] || null;
+  const specPredRes = results[6] || null;
 
   // match_results
   matchResultsCache = {};
@@ -243,7 +255,7 @@ async function loadSupabaseData() {
   // player_points
   playerPointsCache = {};
   (ptsRes.data || []).forEach(r => {
-    playerPointsCache[r.player_id] = r.total;
+    playerPointsCache[r.player_id] = { total: r.total || 0, special_total: r.special_total || 0 };
   });
 
   // predictions (current player only)
@@ -270,6 +282,23 @@ async function loadSupabaseData() {
         groupPredictions[r.grupo + '_evaluated'] = true;
       }
     });
+  }
+
+  // special_results (admin-set winners)
+  specialResults = specResRes?.data || null;
+
+  // special_predictions (current player only)
+  specialPredictions = {};
+  if (specPredRes?.data) {
+    const r = specPredRes.data;
+    specialPredictions = {
+      mvp:               r.mvp               || null,
+      top_scorer:        r.top_scorer        || null,
+      top_assister:      r.top_assister      || null,
+      golden_glove:      r.golden_glove      || null,
+      revelation_team:   r.revelation_team   || null,
+      disappointment_team: r.disappointment_team || null
+    };
   }
 }
 
@@ -336,14 +365,19 @@ function getGroupOrder(grupo) {
   return seen.slice(0, 4);
 }
 
+function getTotalPoints(slug) {
+  const cache = playerPointsCache[slug] || { total: 0, special_total: 0 };
+  return (cache.total || 0) + (cache.special_total || 0);
+}
+
 function getUserPoints() {
-  return playerPointsCache[currentPlayerSlug] || 0;
+  return getTotalPoints(currentPlayerSlug);
 }
 
 function getUserRankPosition() {
   if (!currentPlayerSlug) return '—';
   const sorted = PLAYERS
-    .map(n => ({ slug: nameToSlug(n), pts: playerPointsCache[nameToSlug(n)] || 0 }))
+    .map(n => ({ slug: nameToSlug(n), pts: getTotalPoints(nameToSlug(n)) }))
     .sort((a, b) => b.pts - a.pts);
   const idx = sorted.findIndex(e => e.slug === currentPlayerSlug);
   return idx >= 0 ? idx + 1 : '—';
@@ -421,11 +455,12 @@ function switchTab(tabName) {
   const btn = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
   if (btn) btn.classList.add('active');
 
-  if (tabName === 'dashboard') renderDashboard();
-  if (tabName === 'partidos')  renderPartidosTab();
-  if (tabName === 'grupos')    renderGruposTab();
-  if (tabName === 'ranking')   renderRankingTab();
-  if (tabName === 'apuestas')  renderApuestasTab();
+  if (tabName === 'dashboard')  renderDashboard();
+  if (tabName === 'partidos')   renderPartidosTab();
+  if (tabName === 'grupos')     renderGruposTab();
+  if (tabName === 'ranking')    renderRankingTab();
+  if (tabName === 'apuestas')   renderApuestasTab();
+  if (tabName === 'especiales') renderEspecialesTab();
 }
 
 // ── Header ─────────────────────────────────────────────────
@@ -968,7 +1003,7 @@ function renderRankingTab() {
 
   const entries = PLAYERS.map(name => ({
     name,
-    points: playerPointsCache[nameToSlug(name)] || 0,
+    points: getTotalPoints(nameToSlug(name)),
     me: name === currentPlayer
   })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
 
@@ -1292,6 +1327,172 @@ function startGlobalCountdown() {
 }
 
 // ── Player Selector ────────────────────────────────────────
+
+// ── Especiales Tab ──────────────────────────────────────────
+
+const SPECIAL_FIELDS = [
+  { key: 'mvp',               label: 'MVP',                icon: '🏅', type: 'player', desc: 'Mejor jugador del torneo' },
+  { key: 'top_scorer',        label: 'Máximo Goleador',    icon: '⚽', type: 'player', desc: 'Jugador con más goles' },
+  { key: 'top_assister',      label: 'Máximo Asistente',   icon: '🎯', type: 'player', desc: 'Jugador con más asistencias' },
+  { key: 'golden_glove',      label: 'Guante de Oro',      icon: '🧤', type: 'player', desc: 'Mejor portero del torneo' },
+  { key: 'revelation_team',   label: 'Selección Revelación', icon: '🌟', type: 'team', desc: 'Selección sorpresa del torneo' },
+  { key: 'disappointment_team', label: 'Selección Decepción', icon: '😞', type: 'team', desc: 'Selección más decepcionante' }
+];
+
+function getAllTeamsSorted() {
+  const teams = new Set();
+  Object.values(matchesData?.grupos || {}).forEach(matches =>
+    matches.forEach(m => { teams.add(m.local); teams.add(m.visitante); })
+  );
+  return [...teams].sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+function renderEspecialesTab() {
+  if (!currentPlayer) {
+    document.getElementById('especiales-list').innerHTML =
+      '<div class="empty-state"><div class="empty-icon">👤</div><p>Selecciona tu usuario para hacer apuestas especiales</p></div>';
+    document.getElementById('especiales-deadline-banner').innerHTML = '';
+    return;
+  }
+
+  const locked = areSpecialsLocked();
+  const deadlineBanner = document.getElementById('especiales-deadline-banner');
+  if (locked) {
+    deadlineBanner.innerHTML = '<div class="especiales-locked-banner">🔒 Plazo cerrado — primer partido iniciado</div>';
+  } else {
+    const msLeft = SPECIAL_DEADLINE - nowInMadrid();
+    const cd = msToCountdown(msLeft);
+    deadlineBanner.innerHTML = `<div class="especiales-open-banner">⏱ Cierra en ${cd || 'breve'}</div>`;
+  }
+
+  const el = document.getElementById('especiales-list');
+  el.innerHTML = SPECIAL_FIELDS.map(f => {
+    const saved  = specialPredictions[f.key] || null;
+    const result = specialResults?.[f.key] || null;
+    const correct = result && saved && saved === result;
+    const wrong   = result && saved && saved !== result;
+
+    let badgeHtml = '';
+    if (result) {
+      badgeHtml = correct
+        ? '<span class="esp-badge esp-correct">✅ +3 pts</span>'
+        : (saved
+            ? '<span class="esp-badge esp-wrong">❌ 0 pts</span>'
+            : '<span class="esp-badge esp-no">Sin apuesta</span>');
+    }
+
+    let inputHtml = '';
+    if (!locked) {
+      if (f.type === 'team') {
+        const teams = getAllTeamsSorted();
+        inputHtml = `
+          <div class="esp-input-row">
+            <select class="esp-select" id="esp-sel-${f.key}" onchange="onSpecialTeamChange('${f.key}')">
+              <option value="">— Elige selección —</option>
+              ${teams.map(t => `<option value="${t}" ${saved === t ? 'selected' : ''}>${flag(t)} ${t}</option>`).join('')}
+            </select>
+            <button class="esp-save-btn" id="esp-btn-${f.key}" onclick="saveSpecialBet('${f.key}')">Guardar</button>
+          </div>`;
+      } else {
+        // Player bet — two-step: team selector → player selector
+        const teams = getAllTeamsSorted();
+        // Derive pre-selected team from saved value
+        let savedTeam = '';
+        if (saved) {
+          for (const t of teams) {
+            const players = getPlayers(t);
+            if (players.some(p => `${p.nombre} ${p.apellido}` === saved)) { savedTeam = t; break; }
+          }
+        }
+        const playersForTeam = savedTeam ? getPlayers(savedTeam) : [];
+        inputHtml = `
+          <div class="esp-input-row esp-player-row">
+            <select class="esp-select" id="esp-team-${f.key}"
+                    onchange="onSpecialTeamChange('${f.key}')">
+              <option value="">— Elige selección —</option>
+              ${teams.map(t => `<option value="${t}" ${savedTeam === t ? 'selected' : ''}>${flag(t)} ${t}</option>`).join('')}
+            </select>
+            <select class="esp-select" id="esp-sel-${f.key}"
+                    ${playersForTeam.length === 0 ? 'disabled' : ''}>
+              <option value="">— Elige jugador —</option>
+              ${playersForTeam.map(p => {
+                const full = `${p.nombre} ${p.apellido}`;
+                return `<option value="${full}" ${saved === full ? 'selected' : ''}>${full}</option>`;
+              }).join('')}
+            </select>
+            <button class="esp-save-btn" id="esp-btn-${f.key}" onclick="saveSpecialBet('${f.key}')">Guardar</button>
+          </div>`;
+      }
+    }
+
+    const savedDisplay = saved
+      ? `<div class="esp-saved-val">${f.type === 'team' ? `${flag(saved)} ` : ''}${saved}</div>`
+      : (locked ? '<div class="esp-no-bet">Sin apuesta</div>' : '');
+
+    return `
+      <div class="esp-card ${correct ? 'esp-card-correct' : wrong ? 'esp-card-wrong' : ''}">
+        <div class="esp-card-header">
+          <span class="esp-icon">${f.icon}</span>
+          <div class="esp-card-title">
+            <strong>${f.label}</strong>
+            <span class="esp-desc">${f.desc}</span>
+          </div>
+          ${badgeHtml}
+        </div>
+        ${result ? `<div class="esp-result-row">Ganador: <strong>${f.type === 'team' ? `${flag(result)} ` : ''}${result}</strong></div>` : ''}
+        ${savedDisplay}
+        ${inputHtml}
+        <div class="esp-toast hidden" id="esp-toast-${f.key}"></div>
+      </div>`;
+  }).join('');
+}
+
+function onSpecialTeamChange(fieldKey) {
+  const field = SPECIAL_FIELDS.find(f => f.key === fieldKey);
+  if (!field || field.type !== 'player') return;
+  const teamSel   = document.getElementById(`esp-team-${fieldKey}`);
+  const playerSel = document.getElementById(`esp-sel-${fieldKey}`);
+  if (!teamSel || !playerSel) return;
+  const team = teamSel.value;
+  const players = team ? getPlayers(team) : [];
+  playerSel.innerHTML = '<option value="">— Elige jugador —</option>' +
+    players.map(p => {
+      const full = `${p.nombre} ${p.apellido}`;
+      return `<option value="${full}">${full}</option>`;
+    }).join('');
+  playerSel.disabled = players.length === 0;
+}
+
+async function saveSpecialBet(fieldKey) {
+  if (!currentPlayerSlug) return;
+  const field = SPECIAL_FIELDS.find(f => f.key === fieldKey);
+  if (!field) return;
+
+  const sel   = document.getElementById(`esp-sel-${fieldKey}`);
+  const btn   = document.getElementById(`esp-btn-${fieldKey}`);
+  const toast = document.getElementById(`esp-toast-${fieldKey}`);
+  const value = sel?.value || '';
+  if (!value) return;
+
+  btn.disabled = true;
+  btn.textContent = '…';
+
+  const upsertData = { player_id: currentPlayerSlug, [fieldKey]: value };
+  const { error } = await sb.from('special_predictions')
+    .upsert(upsertData, { onConflict: 'player_id' });
+
+  if (error) {
+    btn.disabled = false;
+    btn.textContent = 'Guardar';
+    if (toast) { toast.textContent = '❌ Error al guardar'; toast.classList.remove('hidden'); setTimeout(() => toast.classList.add('hidden'), 2500); }
+    return;
+  }
+
+  specialPredictions[fieldKey] = value;
+  btn.textContent = '✅';
+  setTimeout(() => { btn.textContent = 'Guardar'; btn.disabled = false; }, 1800);
+  if (toast) { toast.textContent = '✅ Guardado'; toast.classList.remove('hidden'); setTimeout(() => toast.classList.add('hidden'), 2000); }
+}
 
 // ── PIN modal ───────────────────────────────────────────────
 
