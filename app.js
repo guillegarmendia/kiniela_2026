@@ -1119,6 +1119,8 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
     const hasPred = pred.sign || pred.golesLocal != null || pred.golesVisitante != null;
     if (!hasPred) return '';
 
+    if (!isMatchLocked(m.fecha, m.hora)) return '';
+
     const signLabel = pred.sign === '1' ? m.local : pred.sign === '2' ? m.visitante : pred.sign === 'X' ? 'Empate' : '—';
     const signBadgeClass = pred.sign === '1' ? 'sign-1' : pred.sign === '2' ? 'sign-2' : 'sign-x';
     const scoreStr = (pred.golesLocal != null && pred.golesVisitante != null)
@@ -1147,7 +1149,8 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
 
   // Build group predictions HTML
   const groups = Object.keys(matchesData.grupos || {}).sort();
-  const groupCards = groups.map(g => {
+  const groupsUnlocked = areGroupsLocked();
+  const groupCards = groupsUnlocked ? groups.map(g => {
     const positions = groupPreds[g];
     if (!positions || positions.length === 0) return '';
     return `
@@ -1164,13 +1167,14 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
         </div>
       </div>
     `;
-  }).filter(Boolean).join('');
+  }).filter(Boolean).join('') : null;
 
-  const totalMatchPreds = Object.keys(matchPreds).length;
-  const totalGroupPreds = Object.keys(groupPreds).length;
+  const totalMatchPreds = allMatches.filter(m => matchPreds[m.id] && isMatchLocked(m.fecha, m.hora)).length;
+  const totalGroupPreds = groupsUnlocked ? Object.keys(groupPreds).length : 0;
 
   // Build special predictions HTML
-  const specialRows = SPECIAL_FIELDS.map(f => {
+  const specialsUnlocked = areSpecialsLocked();
+  const specialRows = specialsUnlocked ? SPECIAL_FIELDS.map(f => {
     const val = specPreds[f.key];
     if (!val) return '';
     const result = specialResults?.[f.key] || null;
@@ -1183,8 +1187,10 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
         <span class="apuesta-esp-value ${badgeClass}">${val}${correct ? ' ✅' : result ? ' ❌' : ''}</span>
       </div>
     `;
-  }).filter(Boolean).join('');
-  const totalSpecialPreds = SPECIAL_FIELDS.filter(f => specPreds[f.key]).length;
+  }).filter(Boolean).join('') : null;
+  const totalSpecialPreds = specialsUnlocked ? SPECIAL_FIELDS.filter(f => specPreds[f.key]).length : 0;
+
+  const lockedUntilMsg = '<div class="empty-state" style="padding:20px 0"><p>🔒 Disponible a partir del 11 jun · 21:00</p></div>';
 
   content.innerHTML = `
     <div class="apuestas-stats-row">
@@ -1198,12 +1204,12 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
 
     <div class="section-header" style="margin-top:16px"><h3>Clasificaciones de Grupos</h3></div>
     <div class="apuesta-groups-grid">
-      ${groupCards || '<div class="empty-state" style="padding:20px 0"><p>Sin clasificaciones guardadas</p></div>'}
+      ${groupCards !== null ? (groupCards || '<div class="empty-state" style="padding:20px 0"><p>Sin clasificaciones guardadas</p></div>') : lockedUntilMsg}
     </div>
 
     <div class="section-header" style="margin-top:16px"><h3>Apuestas Especiales</h3></div>
     <div class="apuesta-esp-list">
-      ${specialRows || '<div class="empty-state" style="padding:20px 0"><p>Sin apuestas especiales guardadas</p></div>'}
+      ${specialRows !== null ? (specialRows || '<div class="empty-state" style="padding:20px 0"><p>Sin apuestas especiales guardadas</p></div>') : lockedUntilMsg}
     </div>
   `;
 }
