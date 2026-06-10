@@ -57,12 +57,12 @@ const FLAG_MAP = {
 
 const PLAYERS = [
   "Cold Garmer", "Luisgarrincha", "Alex Casadinho", "Guishermo Casadinho",
-  "AnsuFigui", "DaniTwangy", "Dudu", "XaviCarbu", "MarkusRashford", "BusiCusi",
+  "DaniTwangy", "Dudu", "XaviCarbu", "MarkusRashford", "BusiCusi",
   "BoxToBox", "Aleix"
 ];
 
 const PLAYER_COLORS = [
-  '#e63946', '#f5c518', '#2ecc71', '#3498db', '#9b59b6',
+  '#e63946', '#f5c518', '#2ecc71', '#3498db',
   '#e67e22', '#1abc9c', '#e91e63', '#00bcd4', '#ff5722',
   '#8e44ad', '#27ae60'
 ];
@@ -72,7 +72,6 @@ const PLAYER_PINS = {
   "Luisgarrincha":       "4944",
   "Alex Casadinho":      "2323",
   "Guishermo Casadinho": "3232",
-  "AnsuFigui":           "5270",
   "DaniTwangy":          "6767",
   "Dudu":                "8923",
   "XaviCarbu":           "1313",
