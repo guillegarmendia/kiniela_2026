@@ -217,7 +217,6 @@ async function showPanel() {
   populateGroupSelect();
   renderHistory();
   renderGroupHistory();
-  populateEspecialesSelects();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -275,7 +274,7 @@ function switchAdminTab(tabName) {
     c.classList.toggle('active', c.id === `admin-tab-${tabName}`)
   );
   if (tabName === 'grupos')     renderGroupHistory();
-  if (tabName === 'especiales') renderEspecialesAdmin();
+  if (tabName === 'jugadores')  renderJugadoresTab();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1104,17 +1103,26 @@ function toggleHistoryItem(id) {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   ESPECIALES — ADMIN
+   ESPECIALES — ADMIN (repartir puntos al final del torneo)
    ═══════════════════════════════════════════════════════════ */
 
 const SPECIAL_FIELDS_ADMIN = [
-  { key: 'mvp',               type: 'player' },
-  { key: 'top_scorer',        type: 'player' },
-  { key: 'top_assister',      type: 'player' },
-  { key: 'golden_glove',      type: 'player' },
-  { key: 'revelation_team',   type: 'team'   },
-  { key: 'disappointment_team', type: 'team' }
+  { key: 'mvp',                 type: 'player' },
+  { key: 'top_scorer',          type: 'player' },
+  { key: 'top_assister',        type: 'player' },
+  { key: 'golden_glove',        type: 'player' },
+  { key: 'revelation_team',     type: 'team'   },
+  { key: 'disappointment_team', type: 'team'   }
 ];
+
+function toggleEspecialesAdmin() {
+  const body    = document.getElementById('especiales-admin-body');
+  const chevron = document.getElementById('especiales-chevron');
+  const hidden  = body.style.display === 'none';
+  body.style.display = hidden ? 'block' : 'none';
+  chevron.textContent = hidden ? '▲' : '▼';
+  if (hidden) populateEspecialesSelects();
+}
 
 function getAllTeamsSortedAdmin() {
   const teams = new Set();
@@ -1125,7 +1133,7 @@ function getAllTeamsSortedAdmin() {
 }
 
 function populateEspecialesSelects() {
-  const teams = getAllTeamsSortedAdmin();
+  const teams    = getAllTeamsSortedAdmin();
   const teamOpts = '<option value="">— Selección —</option>' +
     teams.map(t => `<option value="${t}">${t}</option>`).join('');
 
@@ -1140,7 +1148,6 @@ function populateEspecialesSelects() {
       const teamSel = document.getElementById(`adm-esp-team-${f.key}`);
       if (teamSel) {
         teamSel.innerHTML = teamOpts;
-        // Pre-select team from stored result
         if (storedSpecialResults?.[f.key]) {
           const savedPlayer = storedSpecialResults[f.key];
           for (const t of teams) {
@@ -1171,24 +1178,17 @@ function adminSpecialTeamChange(fieldKey, preselectPlayer = null) {
   playerSel.disabled = players.length === 0;
 }
 
-function renderEspecialesAdmin() {
-  // Re-populate selects with current stored values
-  populateEspecialesSelects();
-}
-
 async function processSpeciales() {
   const btn = document.getElementById('btn-especiales-process');
   btn.disabled = true;
   btn.textContent = '⏳ Procesando…';
 
-  // Collect form values
   const results = {};
   SPECIAL_FIELDS_ADMIN.forEach(f => {
     const sel = document.getElementById(`adm-esp-sel-${f.key}`);
     results[f.key] = sel?.value || null;
   });
 
-  // Validate at least one field
   if (Object.values(results).every(v => !v)) {
     showToast('Completa al menos un campo antes de guardar', 'error');
     btn.disabled = false;
@@ -1196,11 +1196,8 @@ async function processSpeciales() {
     return;
   }
 
-  // 1. Save special_results
-  const { error: resErr } = await sb.from('special_results').upsert(
-    { id: 'final', ...results },
-    { onConflict: 'id' }
-  );
+  const { error: resErr } = await sb.from('special_results')
+    .upsert({ id: 'final', ...results }, { onConflict: 'id' });
   if (resErr) {
     showToast('Error guardando resultados: ' + resErr.message, 'error');
     btn.disabled = false;
@@ -1209,7 +1206,6 @@ async function processSpeciales() {
   }
   storedSpecialResults = results;
 
-  // 2. Reload all special_predictions + player_points
   const [specPredsRes, ptsRes] = await Promise.all([
     sb.from('special_predictions').select('*'),
     sb.from('player_points').select('*')
@@ -1219,7 +1215,6 @@ async function processSpeciales() {
   const ptsMap = {};
   (ptsRes.data || []).forEach(r => { ptsMap[r.player_id] = r; });
 
-  // 3. Calculate special_total per player
   const ptsUpserts = [];
   const rowData    = [];
 
@@ -1230,24 +1225,15 @@ async function processSpeciales() {
 
     let specialPts = 0;
     SPECIAL_FIELDS_ADMIN.forEach(f => {
-      if (results[f.key] && pred[f.key] && pred[f.key] === results[f.key]) {
-        specialPts += 3;
-      }
+      if (results[f.key] && pred[f.key] && pred[f.key] === results[f.key]) specialPts += 3;
     });
 
-    ptsUpserts.push({
-      player_id:     slug,
-      total:         current.total || 0,
-      special_total: specialPts
-    });
-
-    rowData.push({ name, specialPts, pred, results });
+    ptsUpserts.push({ player_id: slug, total: current.total || 0, special_total: specialPts });
+    rowData.push({ name, specialPts });
   });
 
-  // 4. Write player_points
   const { error: ptsErr } = await sb.from('player_points')
     .upsert(ptsUpserts, { onConflict: 'player_id' });
-
   if (ptsErr) {
     showToast('Error actualizando puntos: ' + ptsErr.message, 'error');
     btn.disabled = false;
@@ -1255,26 +1241,24 @@ async function processSpeciales() {
     return;
   }
 
-  // 5. Render summary
-  const card    = document.getElementById('especiales-results-card');
-  const summary = document.getElementById('especiales-results-summary');
-  card.classList.remove('hidden');
-
   const LABELS = {
     mvp: '🏅 MVP', top_scorer: '⚽ Máx. Goleador', top_assister: '🎯 Máx. Asistente',
     golden_glove: '🧤 Guante Oro', revelation_team: '🌟 Revelación', disappointment_team: '😞 Decepción'
   };
 
+  const card    = document.getElementById('especiales-results-card');
+  const summary = document.getElementById('especiales-results-summary');
+  card.classList.remove('hidden');
   summary.innerHTML = `
     <div class="esp-admin-results">
-      <h4 style="margin:0 0 12px;color:var(--accent)">Resultados registrados</h4>
+      <h4 style="margin:0 0 12px;color:var(--accent)">Ganadores registrados</h4>
       ${SPECIAL_FIELDS_ADMIN.map(f => results[f.key]
         ? `<div class="esp-admin-result-row"><span>${LABELS[f.key]}</span><strong>${results[f.key]}</strong></div>`
         : '').join('')}
     </div>
     <h4 style="margin:16px 0 10px">Puntos especiales por jugador</h4>
     <div class="esp-admin-pts-list">
-      ${rowData.sort((a,b) => b.specialPts - a.specialPts).map(r => `
+      ${rowData.sort((a, b) => b.specialPts - a.specialPts).map(r => `
         <div class="esp-admin-pts-row">
           <div class="player-av-sm" style="background:${playerColor(r.name)}">${getInitial(r.name)}</div>
           <span class="esp-admin-pts-name">${r.name}</span>
@@ -1282,9 +1266,120 @@ async function processSpeciales() {
         </div>`).join('')}
     </div>`;
 
-  showToast('✅ Resultados especiales guardados y puntos actualizados', 'success');
+  showToast('✅ Puntos especiales guardados correctamente', 'success');
   btn.disabled = false;
   btn.textContent = '🌟 Guardar Resultados y Repartir Puntos';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TAB JUGADORES — apuestas finalizadas por jugador
+   ═══════════════════════════════════════════════════════════ */
+
+function renderJugadoresTab() {
+  const container = document.getElementById('jugadores-list');
+  if (!container) return;
+
+  // Partidos con resultado registrado, ordenados por fecha
+  const finishedMatches = allMatchesSorted.filter(m => storedResultsCache[m.id]);
+
+  if (finishedMatches.length === 0) {
+    container.innerHTML = `
+      <div class="empty-history">
+        <div class="empty-icon">📭</div>
+        <p>Aún no hay partidos finalizados.</p>
+      </div>`;
+    return;
+  }
+
+  // Ordenar jugadores por puntos totales (desc)
+  const playersRanked = [...PLAYERS].sort((a, b) => {
+    const slugA = nameToSlug(a);
+    const slugB = nameToSlug(b);
+    const ptsA  = allPredictionsCache
+      .filter(r => r.player_id === slugA && storedResultsCache[r.match_id])
+      .reduce((s, r) => s + (r.points?.total || 0), 0);
+    const ptsB  = allPredictionsCache
+      .filter(r => r.player_id === slugB && storedResultsCache[r.match_id])
+      .reduce((s, r) => s + (r.points?.total || 0), 0);
+    return ptsB - ptsA;
+  });
+
+  container.innerHTML = playersRanked.map(player => {
+    const slug  = nameToSlug(player);
+    const color = playerColor(player);
+
+    // Predicciones finalizadas de este jugador
+    const playerPreds = {};
+    allPredictionsCache
+      .filter(r => r.player_id === slug && storedResultsCache[r.match_id])
+      .forEach(r => { playerPreds[r.match_id] = r; });
+
+    const totalPts = Object.values(playerPreds)
+      .reduce((s, r) => s + (r.points?.total || 0), 0);
+
+    const matchRows = finishedMatches.map(m => {
+      const result = storedResultsCache[m.id];
+      const pred   = playerPreds[m.id];
+      const b      = pred?.points || { sign: 0, golesLocal: 0, golesVisitante: 0, firstScorer: 0, total: 0 };
+
+      const predStr = pred
+        ? `${pred.sign || '—'} · ${pred.goles_local ?? '—'}–${pred.goles_visitante ?? '—'} · ${pred.first_scorer || 'Ninguno'}`
+        : '—';
+
+      const hit = ok => ok ? '✅' : '❌';
+
+      return `
+        <tr>
+          <td style="font-size:11px;color:var(--text-muted)">
+            <span class="history-group-badge" style="font-size:10px">Gr.${m.grupo}</span>
+            ${flag(m.local)} ${m.local} ${result.golesLocal}–${result.golesVisitante} ${m.visitante} ${flag(m.visitante)}
+          </td>
+          <td style="font-size:11px;color:var(--text-muted)">${predStr}</td>
+          <td style="text-align:center">${hit(b.sign)}</td>
+          <td style="text-align:center">${hit(b.golesLocal)}</td>
+          <td style="text-align:center">${hit(b.golesVisitante)}</td>
+          <td style="text-align:center">${hit(b.firstScorer)}</td>
+          <td style="text-align:right;font-weight:700;color:${b.total > 0 ? 'var(--accent)' : 'var(--text-muted)'}">${b.total}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div class="history-item" id="jug-${slug}">
+        <div class="history-item-header" onclick="toggleHistoryItem('jug-${slug}')">
+          <div class="history-match-info" style="gap:10px">
+            <div class="player-av" style="background:${color};width:28px;height:28px;font-size:13px;flex-shrink:0">${getInitial(player)}</div>
+            <span class="history-teams">${player}</span>
+            <span class="history-scorer-info" style="margin-left:auto">${finishedMatches.length} partidos finalizados</span>
+            <span class="history-score" style="min-width:60px;text-align:right">${totalPts} pts</span>
+          </div>
+          <span class="history-chevron">▼</span>
+        </div>
+        <div class="history-item-body">
+          <table class="history-mini-table">
+            <thead>
+              <tr>
+                <th>Partido</th>
+                <th>Tu apuesta</th>
+                <th style="text-align:center">1/X/2</th>
+                <th style="text-align:center">G.L.</th>
+                <th style="text-align:center">G.V.</th>
+                <th style="text-align:center">Gol.</th>
+                <th style="text-align:right">Pts</th>
+              </tr>
+            </thead>
+            <tbody>${matchRows}</tbody>
+            <tfoot>
+              <tr>
+                <td colspan="6" style="text-align:right;font-weight:600;padding-top:8px">Total</td>
+                <td style="text-align:right;font-weight:700;color:var(--accent);padding-top:8px">${totalPts} pts</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 /* ═══════════════════════════════════════════════════════════
