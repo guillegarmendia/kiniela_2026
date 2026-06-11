@@ -123,6 +123,7 @@ let countdownInterval = null;
 let badgeIntervals = [];
 
 let unsavedMatchPreds = new Set();  // match IDs with unsaved changes (unused for dirty tracking, just for reference)
+let apuestasPlayer = '';  // slug of player selected in Apuestas tab
 let historicoCache = {};  // { matchId: predRows[] } — fetched on demand
 
 let specialPredictions = {}; // { mvp, top_scorer, top_assister, golden_glove, revelation_team, disappointment_team }
@@ -463,8 +464,9 @@ function switchTab(tabName) {
   if (tabName === 'partidos')   renderPartidosTab();
   if (tabName === 'grupos')     renderGruposTab();
   if (tabName === 'ranking')    renderRankingTab();
-  if (tabName === 'apuestas')   renderApuestasTab();
-  if (tabName === 'jugadores')  renderJugadoresTab();
+  if (tabName === 'apuestas')    renderApuestasTab();
+  if (tabName === 'misapuestas') renderMisApuestasTab();
+  if (tabName === 'jugadores')   renderJugadoresTab();
 }
 
 // ── Header ─────────────────────────────────────────────────
@@ -1037,13 +1039,42 @@ function renderRankingTab() {
 // ── Apuestas Tab ───────────────────────────────────────────
 
 function renderApuestasTab() {
-  const content = document.getElementById('apuestas-content');
-  if (!content) return;
-  if (!currentPlayerSlug) {
-    content.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><p>Selecciona tu usuario para ver tus apuestas</p></div>';
-    return;
+  renderApuestasPlayerPicker();
+  if (apuestasPlayer) {
+    loadAndRenderApuestas(apuestasPlayer);
+  } else {
+    const content = document.getElementById('apuestas-content');
+    if (content) {
+      content.innerHTML = '<div class="empty-state"><div class="empty-icon">🎯</div><p>Selecciona un jugador para ver sus apuestas</p></div>';
+    }
   }
-  loadAndRenderApuestas(currentPlayerSlug);
+}
+
+function renderApuestasPlayerPicker() {
+  const picker = document.getElementById('apuestas-player-picker');
+  if (!picker) return;
+  picker.innerHTML = `
+    <div class="apuestas-picker-title">Ver apuestas de:</div>
+    <div class="apuestas-player-grid">
+      ${PLAYERS.map(p => {
+        const slug = nameToSlug(p);
+        const isSelected = slug === apuestasPlayer;
+        return `
+          <button class="apuestas-player-btn ${isSelected ? 'selected' : ''}"
+                  data-slug="${slug}" onclick="selectApuestasPlayer('${slug}')">
+            <div class="player-av-sm" style="background:${playerColor(p)}">${getInitial(p)}</div>
+            <span>${p}</span>
+          </button>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function selectApuestasPlayer(slug) {
+  apuestasPlayer = slug;
+  renderApuestasPlayerPicker();
+  loadAndRenderApuestas(slug);
 }
 
 
@@ -1186,6 +1217,148 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
     <div class="section-header" style="margin-top:16px"><h3>Apuestas Especiales</h3></div>
     <div class="apuesta-esp-list">
       ${specialRows !== null ? (specialRows || '<div class="empty-state" style="padding:20px 0"><p>Sin apuestas especiales guardadas</p></div>') : lockedUntilMsg}
+    </div>
+  `;
+}
+
+// ── Mis Apuestas Tab ───────────────────────────────────────
+
+async function renderMisApuestasTab() {
+  const el = document.getElementById('misapuestas-content');
+  if (!el) return;
+
+  if (!currentPlayerSlug) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><p>Selecciona tu usuario para ver tus apuestas</p></div>';
+    return;
+  }
+
+  el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando…</p></div>';
+
+  try {
+    const [predsRes, groupPredsRes, specPredRes] = await Promise.all([
+      sb.from('predictions').select('*').eq('player_id', currentPlayerSlug),
+      sb.from('group_predictions').select('*').eq('player_id', currentPlayerSlug),
+      sb.from('special_predictions').select('*').eq('player_id', currentPlayerSlug).maybeSingle()
+    ]);
+
+    const matchPreds = {};
+    (predsRes.data || []).forEach(r => {
+      matchPreds[r.match_id] = {
+        sign: r.sign,
+        golesLocal: r.goles_local,
+        golesVisitante: r.goles_visitante,
+        firstScorer: r.first_scorer
+      };
+    });
+
+    const groupPreds = {};
+    (groupPredsRes.data || []).forEach(r => { groupPreds[r.grupo] = r.positions; });
+
+    const specPreds = specPredRes?.data || {};
+
+    renderMisApuestasContent(matchPreds, groupPreds, specPreds);
+  } catch (e) {
+    el.innerHTML = '<div class="empty-state"><p>❌ Error al cargar</p></div>';
+    console.error('renderMisApuestasTab:', e);
+  }
+}
+
+function renderMisApuestasContent(matchPreds, groupPreds, specPreds) {
+  const el = document.getElementById('misapuestas-content');
+  if (!el || !matchesData) return;
+
+  const allMatches = getAllMatchesSorted();
+
+  // Todos los partidos donde haya pronóstico guardado (abiertos y cerrados)
+  const matchRows = allMatches.map(m => {
+    const pred = matchPreds[m.id];
+    if (!pred) return '';
+    const hasPred = pred.sign || pred.golesLocal != null || pred.golesVisitante != null;
+    if (!hasPred) return '';
+
+    const locked = isMatchLocked(m.fecha, m.hora);
+    const signLabel = pred.sign === '1' ? m.local : pred.sign === '2' ? m.visitante : pred.sign === 'X' ? 'Empate' : '—';
+    const signBadgeClass = pred.sign === '1' ? 'sign-1' : pred.sign === '2' ? 'sign-2' : 'sign-x';
+    const scoreStr = (pred.golesLocal != null && pred.golesVisitante != null)
+      ? `${pred.golesLocal} – ${pred.golesVisitante}`
+      : '— – —';
+    const statusBadge = locked
+      ? '<span style="font-size:10px;color:var(--text-muted)">🔒</span>'
+      : '<span style="font-size:10px;color:var(--success)">🟢</span>';
+
+    return `
+      <div class="apuesta-match-row">
+        <div class="apuesta-match-header">
+          <span class="match-group-badge">Grupo ${m.grupo}</span>
+          <span class="apuesta-match-date">${m.fecha} · ${m.hora}</span>
+          ${statusBadge}
+        </div>
+        <div class="apuesta-match-teams-row">
+          <span>${flag(m.local)} ${m.local}</span>
+          <span class="apuesta-vs">vs</span>
+          <span>${m.visitante} ${flag(m.visitante)}</span>
+        </div>
+        <div class="apuesta-pred-row">
+          ${pred.sign ? `<span class="apuesta-sign-badge ${signBadgeClass}">${pred.sign} · ${signLabel}</span>` : ''}
+          <span class="apuesta-score-badge">${scoreStr}</span>
+          ${pred.firstScorer ? `<span class="apuesta-scorer-badge">⚡ ${pred.firstScorer}</span>` : ''}
+        </div>
+      </div>`;
+  }).filter(Boolean).join('');
+
+  // Grupos
+  const grupos = Object.keys(matchesData.grupos || {}).sort();
+  const groupCards = grupos.map(g => {
+    const positions = groupPreds[g];
+    if (!positions || positions.length === 0) return '';
+    return `
+      <div class="apuesta-group-card">
+        <div class="apuesta-group-title">Grupo ${g}</div>
+        <div class="apuesta-group-teams">
+          ${positions.map((team, i) => `
+            <div class="apuesta-group-row">
+              <span class="group-pos">${getPositionLabel(i)}</span>
+              <span class="group-flag">${flag(team)}</span>
+              <span class="group-name">${team}</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }).filter(Boolean).join('');
+
+  // Especiales
+  const specialRows = SPECIAL_FIELDS.map(f => {
+    const val = specPreds[f.key];
+    if (!val) return '';
+    return `
+      <div class="apuesta-esp-row">
+        <span class="apuesta-esp-icon">${f.icon}</span>
+        <span class="apuesta-esp-label">${f.label}</span>
+        <span class="apuesta-esp-value">${val}</span>
+      </div>`;
+  }).filter(Boolean).join('');
+
+  const totalMatch  = allMatches.filter(m => matchPreds[m.id] && (matchPreds[m.id].sign || matchPreds[m.id].golesLocal != null)).length;
+  const totalGroups = Object.keys(groupPreds).length;
+  const totalSpec   = SPECIAL_FIELDS.filter(f => specPreds[f.key]).length;
+
+  el.innerHTML = `
+    <div class="apuestas-stats-row">
+      <div class="apuestas-stat"><span>${totalMatch}</span><small>Partidos</small></div>
+      <div class="apuestas-stat"><span>${totalGroups}</span><small>Grupos</small></div>
+      <div class="apuestas-stat"><span>${totalSpec}</span><small>Especiales</small></div>
+    </div>
+
+    <div class="section-header" style="margin-top:4px"><h3>Pronósticos de Partidos</h3></div>
+    ${matchRows || '<div class="empty-state" style="padding:20px 0"><p>Sin pronósticos guardados</p></div>'}
+
+    <div class="section-header" style="margin-top:16px"><h3>Clasificaciones de Grupos</h3></div>
+    <div class="apuesta-groups-grid">
+      ${groupCards || '<div class="empty-state" style="padding:20px 0"><p>Sin clasificaciones guardadas</p></div>'}
+    </div>
+
+    <div class="section-header" style="margin-top:16px"><h3>Apuestas Especiales</h3></div>
+    <div class="apuesta-esp-list">
+      ${specialRows || '<div class="empty-state" style="padding:20px 0"><p>Sin apuestas especiales guardadas</p></div>'}
     </div>
   `;
 }
