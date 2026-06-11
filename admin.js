@@ -690,25 +690,24 @@ function hideConfirmModal() {
 async function confirmProcess() {
   const confirmBtn = document.getElementById('btn-modal-confirm');
   confirmBtn.disabled = true;
+
+  // Capturar los valores ANTES de que hideConfirmModal los ponga a null
+  const matchId = pendingMatchId;
+  const result  = pendingResult;
+  const grupo   = pendingGrupo;
+  const order   = pendingRealOrder;
+
   hideConfirmModal();
 
   try {
-    if (pendingGrupo && pendingRealOrder) {
-      const grupo = pendingGrupo;
-      const order = pendingRealOrder;
-      pendingGrupo     = null;
-      pendingRealOrder = null;
+    if (grupo && order) {
       const rowData = await processGroup(grupo, order);
       await refreshAdminData();
       renderGroupResultsTable(grupo, order, rowData);
       populateGroupSelect();
       renderGroupHistory();
       showToast(`¡Grupo ${grupo} cerrado y puntos repartidos!`, 'success');
-    } else if (pendingMatchId && pendingResult) {
-      const matchId = pendingMatchId;
-      const result  = pendingResult;
-      pendingMatchId = null;
-      pendingResult  = null;
+    } else if (matchId && result) {
       const rowData = await processMatch(matchId, result);
       await refreshAdminData();
       renderResultsTable(matchId, { ...result, realSign: calcRealSign(result.golesLocal, result.golesVisitante) }, rowData);
@@ -721,10 +720,6 @@ async function confirmProcess() {
     showToast('Error al procesar. Revisa la consola.', 'error');
   } finally {
     confirmBtn.disabled = false;
-    pendingMatchId   = null;
-    pendingResult    = null;
-    pendingGrupo     = null;
-    pendingRealOrder = null;
     document.querySelector('#confirm-modal h3').textContent = '¿Confirmar acción?';
     document.querySelector('#confirm-modal p:first-of-type').innerHTML =
       'Esto repartirá puntos a todos los participantes y marcará el partido como <strong>Finalizado</strong>.';
