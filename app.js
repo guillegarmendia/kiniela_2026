@@ -13,8 +13,9 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── Constants ──────────────────────────────────────────────
 
-const GROUPS_DEADLINE   = new Date(2026, 5, 11, 21, 0, 0); // June 11 2026 21:00 Madrid time
-const SPECIAL_DEADLINE  = new Date(2026, 5, 11, 21, 0, 0); // same — first match kickoff
+const GROUPS_DEADLINE         = new Date(2026, 5, 11, 21, 0, 0); // June 11 2026 21:00 Madrid time
+const GROUPS_DEADLINE_XAVI    = new Date(2026, 5, 11, 23, 0, 0); // XaviCarbu extended deadline
+const SPECIAL_DEADLINE        = new Date(2026, 5, 11, 21, 0, 0); // same — first match kickoff
 
 const MONTH_MAP = {
   'ene': 0, 'feb': 1, 'mar': 2, 'abr': 3, 'may': 4, 'jun': 5,
@@ -149,7 +150,8 @@ function isMatchLocked(fecha, hora) {
 }
 
 function areGroupsLocked() {
-  return nowInMadrid() >= GROUPS_DEADLINE;
+  const deadline = currentPlayerSlug === 'xavicarbu' ? GROUPS_DEADLINE_XAVI : GROUPS_DEADLINE;
+  return nowInMadrid() >= deadline;
 }
 
 function areSpecialsLocked() {
@@ -504,7 +506,8 @@ function renderDashboard() {
 
   const alertGroups = document.getElementById('alert-groups');
   if (!areGroupsLocked()) {
-    const ms = GROUPS_DEADLINE - nowInMadrid();
+    const deadline = currentPlayerSlug === 'xavicarbu' ? GROUPS_DEADLINE_XAVI : GROUPS_DEADLINE;
+    const ms = deadline - nowInMadrid();
     const cd = msToCountdown(ms);
     if (cd && ms < 48 * 3600 * 1000) {
       alertGroups.classList.remove('hidden');
@@ -841,12 +844,15 @@ function renderGruposTab() {
 
 function renderGruposBanner() {
   const banner = document.getElementById('grupos-banner');
+  const isXavi = currentPlayerSlug === 'xavicarbu';
+  const deadline = isXavi ? GROUPS_DEADLINE_XAVI : GROUPS_DEADLINE;
+  const deadlineLabel = isXavi ? '23:00' : '21:00';
   if (areGroupsLocked()) {
     banner.innerHTML = '<div class="deadline-closed">🔒 Clasificación de grupos cerrada</div>';
   } else {
-    const ms = GROUPS_DEADLINE - nowInMadrid();
+    const ms = deadline - nowInMadrid();
     const cd = msToCountdown(ms);
-    banner.innerHTML = `<div class="deadline-open">⏰ Grupos cierran el 11 jun a las 21:00${cd ? ' — en ' + cd : ''}</div>`;
+    banner.innerHTML = `<div class="deadline-open">⏰ Grupos cierran el 11 jun a las ${deadlineLabel}${cd ? ' — en ' + cd : ''}</div>`;
   }
 }
 
@@ -1517,9 +1523,10 @@ async function saveSpecialBet(fieldKey) {
     .upsert(upsertData, { onConflict: 'player_id' });
 
   if (error) {
+    console.error('saveSpecialBet error:', error);
     btn.disabled = false;
     btn.textContent = 'Guardar';
-    if (toast) { toast.textContent = '❌ Error al guardar'; toast.classList.remove('hidden'); setTimeout(() => toast.classList.add('hidden'), 2500); }
+    if (toast) { toast.textContent = `❌ ${error.message || error.code || 'Error al guardar'}`; toast.classList.remove('hidden'); setTimeout(() => toast.classList.add('hidden'), 4000); }
     return;
   }
 
