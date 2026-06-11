@@ -465,7 +465,7 @@ function switchTab(tabName) {
   if (tabName === 'grupos')     renderGruposTab();
   if (tabName === 'ranking')    renderRankingTab();
   if (tabName === 'apuestas')   renderApuestasTab();
-  if (tabName === 'especiales') renderEspecialesTab();
+  if (tabName === 'jugadores')  renderJugadoresTab();
 }
 
 // ── Header ─────────────────────────────────────────────────
@@ -1369,7 +1369,7 @@ function startGlobalCountdown() {
 
 // ── Player Selector ────────────────────────────────────────
 
-// ── Especiales Tab ──────────────────────────────────────────
+// ── Especiales (constante necesaria para tab Apuestas) ──────
 
 const SPECIAL_FIELDS = [
   { key: 'mvp',               label: 'MVP',                icon: '🏅', type: 'player', desc: 'Mejor jugador del torneo' },
@@ -1380,160 +1380,98 @@ const SPECIAL_FIELDS = [
   { key: 'disappointment_team', label: 'Selección Decepción', icon: '😞', type: 'team', desc: 'Selección más decepcionante' }
 ];
 
-function getAllTeamsSorted() {
-  const teams = new Set();
-  Object.values(matchesData?.grupos || {}).forEach(matches =>
-    matches.forEach(m => { teams.add(m.local); teams.add(m.visitante); })
-  );
-  return [...teams].sort((a, b) => a.localeCompare(b, 'es'));
-}
+// ── Jugadores Tab ────────────────────────────────────────────
 
-function renderEspecialesTab() {
-  if (!currentPlayer) {
-    document.getElementById('especiales-list').innerHTML =
-      '<div class="empty-state"><div class="empty-icon">👤</div><p>Selecciona tu usuario para hacer apuestas especiales</p></div>';
-    document.getElementById('especiales-deadline-banner').innerHTML = '';
+let jugadoresCache = null; // { playerSlug: { matchId: predRow } }
+
+async function renderJugadoresTab() {
+  const el = document.getElementById('jugadores-content');
+  if (!el) return;
+
+  const finished = getAllMatchesSorted().filter(m => matchResultsCache[m.id]);
+
+  if (finished.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><p>Aún no hay partidos finalizados</p></div>';
     return;
   }
 
-  const locked = areSpecialsLocked();
-  const deadlineBanner = document.getElementById('especiales-deadline-banner');
-  if (locked) {
-    deadlineBanner.innerHTML = '<div class="especiales-locked-banner">🔒 Plazo cerrado — primer partido iniciado</div>';
-  } else {
-    const msLeft = SPECIAL_DEADLINE - nowInMadrid();
-    const cd = msToCountdown(msLeft);
-    deadlineBanner.innerHTML = `<div class="especiales-open-banner">⏱ Cierra en ${cd || 'breve'}</div>`;
+  // Cargar predicciones de todos los partidos finalizados (una sola query)
+  if (!jugadoresCache) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando…</p></div>';
+    const matchIds = finished.map(m => m.id);
+    const { data } = await sb.from('predictions').select('*').in('match_id', matchIds);
+    jugadoresCache = {};
+    (data || []).forEach(r => {
+      if (!jugadoresCache[r.player_id]) jugadoresCache[r.player_id] = {};
+      jugadoresCache[r.player_id][r.match_id] = r;
+    });
   }
 
-  const el = document.getElementById('especiales-list');
-  el.innerHTML = SPECIAL_FIELDS.map(f => {
-    const saved  = specialPredictions[f.key] || null;
-    const result = specialResults?.[f.key] || null;
-    const correct = result && saved && saved === result;
-    const wrong   = result && saved && saved !== result;
+  // Ordenar jugadores por puntos totales en partidos finalizados (desc)
+  const ranked = [...PLAYERS].sort((a, b) => {
+    const ptsA = Object.values(jugadoresCache[nameToSlug(a)] || {}).reduce((s, r) => s + (r.points?.total || 0), 0);
+    const ptsB = Object.values(jugadoresCache[nameToSlug(b)] || {}).reduce((s, r) => s + (r.points?.total || 0), 0);
+    return ptsB - ptsA;
+  });
 
-    let badgeHtml = '';
-    if (result) {
-      badgeHtml = correct
-        ? '<span class="esp-badge esp-correct">✅ +3 pts</span>'
-        : (saved
-            ? '<span class="esp-badge esp-wrong">❌ 0 pts</span>'
-            : '<span class="esp-badge esp-no">Sin apuesta</span>');
-    }
+  el.innerHTML = ranked.map(player => {
+    const slug  = nameToSlug(player);
+    const preds = jugadoresCache[slug] || {};
+    const total = Object.values(preds).reduce((s, r) => s + (r.points?.total || 0), 0);
 
-    let inputHtml = '';
-    if (!locked) {
-      if (f.type === 'team') {
-        const teams = getAllTeamsSorted();
-        inputHtml = `
-          <div class="esp-input-row">
-            <select class="esp-select" id="esp-sel-${f.key}" onchange="onSpecialTeamChange('${f.key}')">
-              <option value="">— Elige selección —</option>
-              ${teams.map(t => `<option value="${t}" ${saved === t ? 'selected' : ''}>${flag(t)} ${t}</option>`).join('')}
-            </select>
-            <button class="esp-save-btn" id="esp-btn-${f.key}" onclick="saveSpecialBet('${f.key}')">Guardar</button>
-          </div>`;
-      } else {
-        // Player bet — two-step: team selector → player selector
-        const teams = getAllTeamsSorted();
-        // Derive pre-selected team from saved value
-        let savedTeam = '';
-        if (saved) {
-          for (const t of teams) {
-            const players = getPlayers(t);
-            if (players.some(p => `${p.nombre} ${p.apellido}` === saved)) { savedTeam = t; break; }
-          }
-        }
-        const playersForTeam = savedTeam ? getPlayers(savedTeam) : [];
-        inputHtml = `
-          <div class="esp-input-row esp-player-row">
-            <select class="esp-select" id="esp-team-${f.key}"
-                    onchange="onSpecialTeamChange('${f.key}')">
-              <option value="">— Elige selección —</option>
-              ${teams.map(t => `<option value="${t}" ${savedTeam === t ? 'selected' : ''}>${flag(t)} ${t}</option>`).join('')}
-            </select>
-            <select class="esp-select" id="esp-sel-${f.key}"
-                    ${playersForTeam.length === 0 ? 'disabled' : ''}>
-              <option value="">— Elige jugador —</option>
-              ${playersForTeam.map(p => {
-                const full = `${p.nombre} ${p.apellido}`;
-                return `<option value="${full}" ${saved === full ? 'selected' : ''}>${full}</option>`;
-              }).join('')}
-            </select>
-            <button class="esp-save-btn" id="esp-btn-${f.key}" onclick="saveSpecialBet('${f.key}')">Guardar</button>
-          </div>`;
-      }
-    }
+    const rows = finished.map(m => {
+      const result = matchResultsCache[m.id];
+      const r      = preds[m.id];
+      const b      = r?.points || { sign: 0, golesLocal: 0, golesVisitante: 0, firstScorer: 0, total: 0 };
+      const hit    = ok => ok ? '✅' : '❌';
+      const predStr = r
+        ? `${r.sign || '—'} · ${r.goles_local ?? '—'}–${r.goles_visitante ?? '—'}`
+        : '<em style="color:var(--text-muted)">Sin apuesta</em>';
 
-    const savedDisplay = saved
-      ? `<div class="esp-saved-val">${f.type === 'team' ? `${flag(saved)} ` : ''}${saved}</div>`
-      : (locked ? '<div class="esp-no-bet">Sin apuesta</div>' : '');
+      return `
+        <div class="jug-match-row">
+          <div class="jug-match-teams">
+            <span class="match-group-badge" style="font-size:10px">Gr.${m.grupo}</span>
+            ${flag(m.local)} ${m.local}
+            <strong style="margin:0 4px">${result.golesLocal}–${result.golesVisitante}</strong>
+            ${m.visitante} ${flag(m.visitante)}
+          </div>
+          <div class="jug-match-pred">${predStr}</div>
+          <div class="jug-match-pts">
+            <span class="jug-facet ${b.sign           ? 'ok' : 'no'}">${hit(b.sign)}1/X/2</span>
+            <span class="jug-facet ${b.golesLocal     ? 'ok' : 'no'}">${hit(b.golesLocal)}GL</span>
+            <span class="jug-facet ${b.golesVisitante ? 'ok' : 'no'}">${hit(b.golesVisitante)}GV</span>
+            <span class="jug-facet ${b.firstScorer    ? 'ok' : 'no'}">${hit(b.firstScorer)}⚡</span>
+            <span class="jug-total-pts ${b.total > 0 ? 'has-pts' : ''}">${b.total}pts</span>
+          </div>
+        </div>`;
+    }).join('');
 
     return `
-      <div class="esp-card ${correct ? 'esp-card-correct' : wrong ? 'esp-card-wrong' : ''}">
-        <div class="esp-card-header">
-          <span class="esp-icon">${f.icon}</span>
-          <div class="esp-card-title">
-            <strong>${f.label}</strong>
-            <span class="esp-desc">${f.desc}</span>
+      <div class="hist-match-row" id="jug-row-${slug}">
+        <button class="hist-match-btn" onclick="toggleJugadorRow('${slug}')">
+          <div class="hist-player-id" style="gap:8px">
+            <div class="player-av-sm" style="background:${playerColor(player)}">${getInitial(player)}</div>
+            <span class="hist-player-name-txt">${player}</span>
           </div>
-          ${badgeHtml}
+          <span style="font-size:12px;color:var(--text-muted);margin-left:auto">${finished.length} partidos</span>
+          <strong class="hist-score" style="min-width:55px;text-align:right">${total} pts</strong>
+          <span class="hist-chevron" id="jug-chevron-${slug}">›</span>
+        </button>
+        <div class="hist-detail hidden" id="jug-detail-${slug}">
+          <div class="jug-player-matches">${rows}</div>
         </div>
-        ${result ? `<div class="esp-result-row">Ganador: <strong>${f.type === 'team' ? `${flag(result)} ` : ''}${result}</strong></div>` : ''}
-        ${savedDisplay}
-        ${inputHtml}
-        <div class="esp-toast hidden" id="esp-toast-${f.key}"></div>
       </div>`;
   }).join('');
 }
 
-function onSpecialTeamChange(fieldKey) {
-  const field = SPECIAL_FIELDS.find(f => f.key === fieldKey);
-  if (!field || field.type !== 'player') return;
-  const teamSel   = document.getElementById(`esp-team-${fieldKey}`);
-  const playerSel = document.getElementById(`esp-sel-${fieldKey}`);
-  if (!teamSel || !playerSel) return;
-  const team = teamSel.value;
-  const players = team ? getPlayers(team) : [];
-  playerSel.innerHTML = '<option value="">— Elige jugador —</option>' +
-    players.map(p => {
-      const full = `${p.nombre} ${p.apellido}`;
-      return `<option value="${full}">${full}</option>`;
-    }).join('');
-  playerSel.disabled = players.length === 0;
-}
-
-async function saveSpecialBet(fieldKey) {
-  if (!currentPlayerSlug) return;
-  const field = SPECIAL_FIELDS.find(f => f.key === fieldKey);
-  if (!field) return;
-
-  const sel   = document.getElementById(`esp-sel-${fieldKey}`);
-  const btn   = document.getElementById(`esp-btn-${fieldKey}`);
-  const toast = document.getElementById(`esp-toast-${fieldKey}`);
-  const value = sel?.value || '';
-  if (!value) return;
-
-  btn.disabled = true;
-  btn.textContent = '…';
-
-  const upsertData = { player_id: currentPlayerSlug, [fieldKey]: value };
-  const { error } = await sb.from('special_predictions')
-    .upsert(upsertData, { onConflict: 'player_id' });
-
-  if (error) {
-    console.error('saveSpecialBet error:', error);
-    btn.disabled = false;
-    btn.textContent = 'Guardar';
-    if (toast) { toast.textContent = `❌ ${error.message || error.code || 'Error al guardar'}`; toast.classList.remove('hidden'); setTimeout(() => toast.classList.add('hidden'), 4000); }
-    return;
-  }
-
-  specialPredictions[fieldKey] = value;
-  btn.textContent = '✅';
-  setTimeout(() => { btn.textContent = 'Guardar'; btn.disabled = false; }, 1800);
-  if (toast) { toast.textContent = '✅ Guardado'; toast.classList.remove('hidden'); setTimeout(() => toast.classList.add('hidden'), 2000); }
+function toggleJugadorRow(slug) {
+  const detail  = document.getElementById(`jug-detail-${slug}`);
+  const chevron = document.getElementById(`jug-chevron-${slug}`);
+  if (!detail) return;
+  const isOpen = !detail.classList.contains('hidden');
+  detail.classList.toggle('hidden', isOpen);
+  if (chevron) chevron.textContent = isOpen ? '›' : '↓';
 }
 
 // ── PIN modal ───────────────────────────────────────────────
