@@ -123,7 +123,6 @@ let countdownInterval = null;
 let badgeIntervals = [];
 
 let unsavedMatchPreds = new Set();  // match IDs with unsaved changes (unused for dirty tracking, just for reference)
-let apuestasPlayer = '';  // slug of player selected in Apuestas tab
 let historicoCache = {};  // { matchId: predRows[] } — fetched on demand
 
 let specialPredictions = {}; // { mvp, top_scorer, top_assister, golden_glove, revelation_team, disappointment_team }
@@ -1038,43 +1037,15 @@ function renderRankingTab() {
 // ── Apuestas Tab ───────────────────────────────────────────
 
 function renderApuestasTab() {
-  renderApuestasPlayerPicker();
-  if (apuestasPlayer) {
-    loadAndRenderApuestas(apuestasPlayer);
-  } else {
-    const content = document.getElementById('apuestas-content');
-    if (content) {
-      content.innerHTML = '<div class="empty-state"><div class="empty-icon">🎯</div><p>Selecciona un jugador para ver sus apuestas</p></div>';
-    }
+  const content = document.getElementById('apuestas-content');
+  if (!content) return;
+  if (!currentPlayerSlug) {
+    content.innerHTML = '<div class="empty-state"><div class="empty-icon">👤</div><p>Selecciona tu usuario para ver tus apuestas</p></div>';
+    return;
   }
+  loadAndRenderApuestas(currentPlayerSlug);
 }
 
-function renderApuestasPlayerPicker() {
-  const picker = document.getElementById('apuestas-player-picker');
-  if (!picker) return;
-  picker.innerHTML = `
-    <div class="apuestas-picker-title">Ver apuestas de:</div>
-    <div class="apuestas-player-grid">
-      ${PLAYERS.map(p => {
-        const slug = nameToSlug(p);
-        const isSelected = slug === apuestasPlayer;
-        return `
-          <button class="apuestas-player-btn ${isSelected ? 'selected' : ''}"
-                  data-slug="${slug}" onclick="selectApuestasPlayer('${slug}')">
-            <div class="player-av-sm" style="background:${playerColor(p)}">${getInitial(p)}</div>
-            <span>${p}</span>
-          </button>
-        `;
-      }).join('')}
-    </div>
-  `;
-}
-
-function selectApuestasPlayer(slug) {
-  apuestasPlayer = slug;
-  renderApuestasPlayerPicker();
-  loadAndRenderApuestas(slug);
-}
 
 async function loadAndRenderApuestas(playerSlug) {
   const content = document.getElementById('apuestas-content');
