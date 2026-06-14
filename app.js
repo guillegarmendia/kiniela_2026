@@ -470,13 +470,14 @@ function switchTab(tabName) {
   const btn = document.querySelector(`.nav-btn[data-tab="${tabName}"]`);
   if (btn) btn.classList.add('active');
 
-  if (tabName === 'dashboard')  renderDashboard();
-  if (tabName === 'partidos')   renderPartidosTab();
-  if (tabName === 'grupos')     renderGruposTab();
-  if (tabName === 'ranking')    renderRankingTab();
-  if (tabName === 'apuestas')    renderApuestasTab();
-  if (tabName === 'misapuestas') renderMisApuestasTab();
-  if (tabName === 'jugadores')   renderJugadoresTab();
+  if (tabName === 'dashboard')           renderDashboard();
+  if (tabName === 'partidos')            renderPartidosTab();
+  if (tabName === 'grupos')              renderGruposTab();
+  if (tabName === 'ranking')             renderRankingTab();
+  if (tabName === 'apuestas')            renderApuestasTab();
+  if (tabName === 'misapuestas')         renderMisApuestasTab();
+  if (tabName === 'jugadores')           renderJugadoresTab();
+  if (tabName === 'especiales-ribinha')  renderEspecialesRibinhaTab();
 }
 
 // ── Header ─────────────────────────────────────────────────
@@ -1760,12 +1761,112 @@ function renderPlayerSelectorSection() {
   });
 }
 
+// ── Especiales Ribinha Tab ──────────────────────────────────
+
+function isEspecialesRibinhaVisible() {
+  return currentPlayerSlug === 'ribinha' && nowInMadrid() < SPECIAL_DEADLINE_RIBINHA;
+}
+
+async function persistSpecialPrediction() {
+  if (!currentPlayerSlug) return;
+  const { error } = await sb.from('special_predictions').upsert({
+    player_id:           currentPlayerSlug,
+    mvp:                 specialPredictions.mvp               || null,
+    top_scorer:          specialPredictions.top_scorer         || null,
+    top_assister:        specialPredictions.top_assister       || null,
+    golden_glove:        specialPredictions.golden_glove       || null,
+    revelation_team:     specialPredictions.revelation_team    || null,
+    disappointment_team: specialPredictions.disappointment_team || null,
+  }, { onConflict: 'player_id' });
+  if (error) throw error;
+}
+
+function renderEspecialesRibinhaTab() {
+  const content = document.getElementById('especiales-ribinha-content');
+  if (!content) return;
+
+  if (!isEspecialesRibinhaVisible()) {
+    switchTab('dashboard');
+    return;
+  }
+
+  const ms = SPECIAL_DEADLINE_RIBINHA - nowInMadrid();
+  const cd = msToCountdown(ms);
+
+  // Player options grouped by team
+  const renderPlayerSelect = (key) => {
+    const val = specialPredictions[key] || '';
+    const groups = (playersData || []).map(team => {
+      const spanishName = Object.keys(TEAM_NAME_MAP).find(k => TEAM_NAME_MAP[k] === team.seleccion) || team.seleccion;
+      const opts = (team.jugadores || []).map(p => {
+        const full = `${p.nombre} ${p.apellido}`;
+        return `<option value="${full}" ${val === full ? 'selected' : ''}>${full}</option>`;
+      }).join('');
+      return `<optgroup label="${spanishName}">${opts}</optgroup>`;
+    }).join('');
+    return `<select class="esp-select" data-key="${key}"><option value="">— Sin seleccionar —</option>${groups}</select>`;
+  };
+
+  const renderTeamSelect = (key) => {
+    const val = specialPredictions[key] || '';
+    const opts = Object.keys(TEAM_NAME_MAP).sort().map(t =>
+      `<option value="${t}" ${val === t ? 'selected' : ''}>${flag(t)} ${t}</option>`
+    ).join('');
+    return `<select class="esp-select" data-key="${key}"><option value="">— Sin seleccionar —</option>${opts}</select>`;
+  };
+
+  content.innerHTML = `
+    <div class="especiales-open-banner">⏰ Cierra hoy a las 19:00${cd ? ' — en ' + cd : ''}</div>
+    <div id="especiales-list">
+      ${SPECIAL_FIELDS.map(f => `
+        <div class="esp-card">
+          <div class="esp-card-header">
+            <span class="esp-icon">${f.icon}</span>
+            <div class="esp-card-title">
+              <strong>${f.label}</strong>
+              <span class="esp-desc">${f.desc}</span>
+            </div>
+          </div>
+          <div class="esp-input-row${f.type === 'player' ? ' esp-player-row' : ''}">
+            ${f.type === 'player' ? renderPlayerSelect(f.key) : renderTeamSelect(f.key)}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    <button class="btn-save-pred" id="btn-save-especiales" style="margin-top:16px;width:100%">💾 Guardar apuestas especiales</button>
+  `;
+
+  content.querySelectorAll('.esp-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      specialPredictions[sel.dataset.key] = sel.value || null;
+    });
+  });
+
+  document.getElementById('btn-save-especiales').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Guardando…';
+    try {
+      await persistSpecialPrediction();
+      showSavedFeedback(btn);
+    } catch (err) {
+      btn.innerHTML = '❌ Error — reintentar';
+      btn.disabled = false;
+      console.error('persistSpecialPrediction:', err);
+    }
+  });
+}
+
 // ── Boot ────────────────────────────────────────────────────
 
 function bootApp() {
   updateHeader();
   renderDashboard();
   startGlobalCountdown();
+
+  // Show Especiales tab only for Ribinha before the deadline
+  const navEspeciales = document.getElementById('nav-especiales-ribinha');
+  if (navEspeciales) navEspeciales.style.display = isEspecialesRibinhaVisible() ? '' : 'none';
 
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
