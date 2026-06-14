@@ -171,6 +171,11 @@ function msToCountdown(ms) {
 }
 
 function getMatchLockStatus(fecha, hora, matchId) {
+  // Special unlock: Luisgarrincha can re-enter his prediction for Brasil vs Marruecos (C-0)
+  if (matchId === 'C-0' && currentPlayerSlug === 'luisgarrincha') {
+    return { locked: false, label: '🔓 Edición especial', cls: 'badge-soon' };
+  }
+
   // If the match has a recorded result it is finished
   if (matchId && matchResultsCache[matchId]) {
     return { locked: true, label: '✅ Finalizado', cls: 'badge-finished', finished: true };
