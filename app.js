@@ -1168,8 +1168,9 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
   }).filter(Boolean).join('');
 
   // Build group predictions HTML
+  // Use the general deadline (not player-specific) for the view tab — editing deadlines are handled in the Grupos tab
   const groups = Object.keys(matchesData.grupos || {}).sort();
-  const groupsUnlocked = areGroupsLocked();
+  const groupsUnlocked = nowInMadrid() >= GROUPS_DEADLINE;
   const groupCards = groupsUnlocked ? groups.map(g => {
     const positions = groupPreds[g];
     if (!positions || positions.length === 0) return '';
@@ -1193,7 +1194,7 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
   const totalGroupPreds = groupsUnlocked ? Object.keys(groupPreds).length : 0;
 
   // Build special predictions HTML
-  const specialsUnlocked = areSpecialsLocked();
+  const specialsUnlocked = nowInMadrid() >= SPECIAL_DEADLINE;
   const specialRows = specialsUnlocked ? SPECIAL_FIELDS.map(f => {
     const val = specPreds[f.key];
     if (!val) return '';
