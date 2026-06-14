@@ -15,7 +15,9 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const GROUPS_DEADLINE         = new Date(2026, 5, 11, 21, 0, 0); // June 11 2026 21:00 Madrid time
 const GROUPS_DEADLINE_XAVI    = new Date(2026, 5, 11, 23, 0, 0); // XaviCarbu extended deadline
+const GROUPS_DEADLINE_RIBINHA = new Date(2026, 5, 14, 19, 0, 0); // Ribinha extended deadline — June 14 19:00
 const SPECIAL_DEADLINE        = new Date(2026, 5, 11, 21, 0, 0); // same — first match kickoff
+const SPECIAL_DEADLINE_RIBINHA = new Date(2026, 5, 14, 19, 0, 0); // Ribinha special predictions deadline
 
 const MONTH_MAP = {
   'ene': 0, 'feb': 1, 'mar': 2, 'abr': 3, 'may': 4, 'jun': 5,
@@ -57,7 +59,7 @@ const FLAG_MAP = {
 };
 
 const PLAYERS = [
-  "Cold Garmer", "Luisgarrincha", "Alex Casadinho", "Guishermo Casadinho",
+  "Cold Garmer", "Luisgarrincha", "Ribinha", "Guishermo Casadinho",
   "DaniTwangy", "Dudu", "XaviCarbu", "MarkusRashford", "BusiCusi",
   "BoxToBox", "Aleix"
 ];
@@ -71,7 +73,7 @@ const PLAYER_COLORS = [
 const PLAYER_PINS = {
   "Cold Garmer":         "0000",
   "Luisgarrincha":       "4944",
-  "Alex Casadinho":      "2323",
+  "Ribinha":             "2323",
   "Guishermo Casadinho": "3232",
   "DaniTwangy":          "6767",
   "Dudu":                "8923",
@@ -150,11 +152,14 @@ function isMatchLocked(fecha, hora) {
 }
 
 function areGroupsLocked() {
-  const deadline = currentPlayerSlug === 'xavicarbu' ? GROUPS_DEADLINE_XAVI : GROUPS_DEADLINE;
+  let deadline = GROUPS_DEADLINE;
+  if (currentPlayerSlug === 'xavicarbu') deadline = GROUPS_DEADLINE_XAVI;
+  if (currentPlayerSlug === 'ribinha') deadline = GROUPS_DEADLINE_RIBINHA;
   return nowInMadrid() >= deadline;
 }
 
 function areSpecialsLocked() {
+  if (currentPlayerSlug === 'ribinha') return nowInMadrid() >= SPECIAL_DEADLINE_RIBINHA;
   return nowInMadrid() >= SPECIAL_DEADLINE;
 }
 
@@ -512,7 +517,9 @@ function renderDashboard() {
 
   const alertGroups = document.getElementById('alert-groups');
   if (!areGroupsLocked()) {
-    const deadline = currentPlayerSlug === 'xavicarbu' ? GROUPS_DEADLINE_XAVI : GROUPS_DEADLINE;
+    let deadline = GROUPS_DEADLINE;
+    if (currentPlayerSlug === 'xavicarbu') deadline = GROUPS_DEADLINE_XAVI;
+    if (currentPlayerSlug === 'ribinha') deadline = GROUPS_DEADLINE_RIBINHA;
     const ms = deadline - nowInMadrid();
     const cd = msToCountdown(ms);
     if (cd && ms < 48 * 3600 * 1000) {
@@ -850,15 +857,16 @@ function renderGruposTab() {
 
 function renderGruposBanner() {
   const banner = document.getElementById('grupos-banner');
-  const isXavi = currentPlayerSlug === 'xavicarbu';
-  const deadline = isXavi ? GROUPS_DEADLINE_XAVI : GROUPS_DEADLINE;
-  const deadlineLabel = isXavi ? '23:00' : '21:00';
+  let deadline = GROUPS_DEADLINE;
+  let deadlineLabel = '11 jun · 21:00';
+  if (currentPlayerSlug === 'xavicarbu') { deadline = GROUPS_DEADLINE_XAVI; deadlineLabel = '11 jun · 23:00'; }
+  if (currentPlayerSlug === 'ribinha')   { deadline = GROUPS_DEADLINE_RIBINHA; deadlineLabel = '14 jun · 19:00'; }
   if (areGroupsLocked()) {
     banner.innerHTML = '<div class="deadline-closed">🔒 Clasificación de grupos cerrada</div>';
   } else {
     const ms = deadline - nowInMadrid();
     const cd = msToCountdown(ms);
-    banner.innerHTML = `<div class="deadline-open">⏰ Grupos cierran el 11 jun a las ${deadlineLabel}${cd ? ' — en ' + cd : ''}</div>`;
+    banner.innerHTML = `<div class="deadline-open">⏰ Grupos cierran el ${deadlineLabel}${cd ? ' — en ' + cd : ''}</div>`;
   }
 }
 
