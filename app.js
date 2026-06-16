@@ -748,9 +748,8 @@ function renderMatchCard(m) {
         <span class="result-row-scorer">⚡ ${predScorer}</span>
       </div>
       <div class="result-row-pts">
-        <span>${hit(predBreakdown.sign)} Signo +${predBreakdown.sign}</span>
-        <span>${hit(predBreakdown.golesLocal)} G.Local +${predBreakdown.golesLocal}</span>
-        <span>${hit(predBreakdown.golesVisitante)} G.Visit. +${predBreakdown.golesVisitante}</span>
+        <span>${hit(predBreakdown.sign)} 1/X/2 +${predBreakdown.sign}</span>
+        <span>${hit(predBreakdown.exacto)} Exacto +${predBreakdown.exacto}</span>
         <span>${hit(predBreakdown.firstScorer)} Goleador +${predBreakdown.firstScorer}</span>
         <strong class="result-total">= ${predBreakdown.total} pts</strong>
       </div>
@@ -1597,10 +1596,9 @@ async function renderJugadoresTab() {
           </div>
           <div class="jug-match-pred">${predStr}</div>
           <div class="jug-match-pts">
-            <span class="jug-facet ${b.sign           ? 'ok' : 'no'}">${hit(b.sign)}1/X/2</span>
-            <span class="jug-facet ${b.golesLocal     ? 'ok' : 'no'}">${hit(b.golesLocal)}GL</span>
-            <span class="jug-facet ${b.golesVisitante ? 'ok' : 'no'}">${hit(b.golesVisitante)}GV</span>
-            <span class="jug-facet ${b.firstScorer    ? 'ok' : 'no'}">${hit(b.firstScorer)}⚡</span>
+            <span class="jug-facet ${b.sign        ? 'ok' : 'no'}">${hit(b.sign)}1/X/2</span>
+            <span class="jug-facet ${b.exacto      ? 'ok' : 'no'}">${hit(b.exacto)}Exacto</span>
+            <span class="jug-facet ${b.firstScorer ? 'ok' : 'no'}">${hit(b.firstScorer)}⚡</span>
             <span class="jug-total-pts ${b.total > 0 ? 'has-pts' : ''}">${b.total}pts</span>
           </div>
         </div>`;

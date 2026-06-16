@@ -168,6 +168,22 @@
         </div>
       </div>
 
+      <!-- ── Tarjeta: Recalcular todos los partidos ───────────── -->
+      <div class="admin-card">
+        <div class="admin-card-header">
+          <span class="card-icon">🔄</span>
+          <h2>Recalcular puntos</h2>
+        </div>
+        <div class="admin-card-body">
+          <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">
+            Aplica la fórmula actual (1/X/2 = 1 pt · Resultado exacto = 4 pts · Goleador = 3 pts) a todos los partidos ya procesados.
+          </p>
+          <button class="btn-process" id="btn-recalcular-todo" onclick="recalcularTodosPartidos()">
+            🔄 Recalcular todos los partidos
+          </button>
+        </div>
+      </div>
+
       <!-- ── Tarjeta: Historial de partidos finalizados ───────── -->
       <div class="admin-card">
         <div class="admin-card-header">

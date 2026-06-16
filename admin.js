@@ -441,33 +441,34 @@ function calcRealSign(golesLocal, golesVisitante) {
 
 /**
  * Calcula los puntos de un pronóstico de partido.
- * Máximo: 9 pts (signo 1 + golesLocal 3 + golesVisitante 3 + goleador 2).
+ * Máximo: 8 pts (signo 1 + resultado exacto 4 + goleador 3).
  *
  * @param {object} pred   - { sign, golesLocal, golesVisitante, firstScorer }
  * @param {object} result - { golesLocal, golesVisitante, firstScorer, realSign }
- * @returns {object} { sign, golesLocal, golesVisitante, firstScorer, total }
+ * @returns {object} { sign, exacto, firstScorer, total }
  */
 function calcMatchPoints(pred, result) {
-  const signPts           = (pred.sign === result.realSign) ? 1 : 0;
-  const golesLocalPts     = (pred.golesLocal     != null && pred.golesLocal     === result.golesLocal)     ? 3 : 0;
-  const golesVisitantePts = (pred.golesVisitante != null && pred.golesVisitante === result.golesVisitante) ? 3 : 0;
+  const signPts  = (pred.sign === result.realSign) ? 1 : 0;
+  const exactoPts = (
+    pred.golesLocal     != null && pred.golesLocal     === result.golesLocal &&
+    pred.golesVisitante != null && pred.golesVisitante === result.golesVisitante
+  ) ? 4 : 0;
 
   let firstScorerPts = 0;
   const predScorer   = pred.firstScorer || '';
   const realScorer   = result.firstScorer || '';
 
   if (realScorer === '' && predScorer === '') {
-    firstScorerPts = 2;
+    firstScorerPts = 3;
   } else if (realScorer !== '' && predScorer === realScorer) {
-    firstScorerPts = 2;
+    firstScorerPts = 3;
   }
 
   return {
-    sign:           signPts,
-    golesLocal:     golesLocalPts,
-    golesVisitante: golesVisitantePts,
-    firstScorer:    firstScorerPts,
-    total:          signPts + golesLocalPts + golesVisitantePts + firstScorerPts
+    sign:        signPts,
+    exacto:      exactoPts,
+    firstScorer: firstScorerPts,
+    total:       signPts + exactoPts + firstScorerPts
   };
 }
 
@@ -537,7 +538,7 @@ async function processMatch(matchId, result) {
     } : {};
 
     // Si el jugador no guardó ningún pronóstico, 0 puntos en todo
-    const breakdown = existingRow ? calcMatchPoints(pred, fullResult) : { sign: 0, golesLocal: 0, golesVisitante: 0, firstScorer: 0, total: 0 };
+    const breakdown = existingRow ? calcMatchPoints(pred, fullResult) : { sign: 0, exacto: 0, firstScorer: 0, total: 0 };
     let total = existingPts[slug] || 0;
 
     // Restar puntos previos si el partido ya había sido evaluado
@@ -762,6 +763,45 @@ function handleProcessClick() {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   RECALCULAR TODOS LOS PARTIDOS (nueva fórmula)
+   ═══════════════════════════════════════════════════════════ */
+
+async function recalcularTodosPartidos() {
+  const btn = document.getElementById('btn-recalcular-todo');
+  btn.disabled = true;
+  btn.textContent = '⏳ Recalculando…';
+
+  try {
+    const { data: results, error } = await sb.from('match_results').select('*');
+    if (error) throw error;
+
+    if (!results || results.length === 0) {
+      showToast('No hay partidos procesados todavía.', 'error');
+      return;
+    }
+
+    for (const r of results) {
+      await processMatch(r.match_id, {
+        golesLocal:     r.goles_local,
+        golesVisitante: r.goles_visitante,
+        firstScorer:    r.first_scorer || ''
+      });
+    }
+
+    // Recargar caches y UI
+    await refreshAdminData();
+    renderHistory();
+    showToast(`✅ ${results.length} partido(s) recalculados con la nueva fórmula.`, 'success');
+  } catch (err) {
+    console.error('Error recalculando partidos:', err);
+    showToast('Error al recalcular. Revisa la consola.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 Recalcular todos los partidos';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
    HANDLER DEL BOTÓN DE GRUPOS
    ═══════════════════════════════════════════════════════════ */
 
@@ -832,8 +872,7 @@ function renderResultsTable(matchId, result, rowData) {
             <th>Jugador</th>
             <th>Su pronóstico</th>
             <th>Signo</th>
-            <th>G. Local</th>
-            <th>G. Visit.</th>
+            <th>Exacto</th>
             <th>Goleador</th>
             <th>Total</th>
           </tr>
@@ -858,10 +897,9 @@ function renderResultsTable(matchId, result, rowData) {
                   </div>
                 </td>
                 <td style="color:var(--text-muted);font-size:12px">${predSign} · ${predScore} · ${predGoal}</td>
-                <td><span class="${b.sign           ? 'check-icon' : 'cross-icon'}">${b.sign           ? '✅' : '❌'} +${b.sign}</span></td>
-                <td><span class="${b.golesLocal     ? 'check-icon' : 'cross-icon'}">${b.golesLocal     ? '✅' : '❌'} +${b.golesLocal}</span></td>
-                <td><span class="${b.golesVisitante ? 'check-icon' : 'cross-icon'}">${b.golesVisitante ? '✅' : '❌'} +${b.golesVisitante}</span></td>
-                <td><span class="${b.firstScorer    ? 'check-icon' : 'cross-icon'}">${b.firstScorer    ? '✅' : '❌'} +${b.firstScorer}</span></td>
+                <td><span class="${b.sign        ? 'check-icon' : 'cross-icon'}">${b.sign        ? '✅' : '❌'} +${b.sign}</span></td>
+                <td><span class="${b.exacto      ? 'check-icon' : 'cross-icon'}">${b.exacto      ? '✅' : '❌'} +${b.exacto}</span></td>
+                <td><span class="${b.firstScorer ? 'check-icon' : 'cross-icon'}">${b.firstScorer ? '✅' : '❌'} +${b.firstScorer}</span></td>
                 <td><span class="pts-badge">+${b.total} pts</span></td>
               </tr>
             `;
@@ -970,7 +1008,7 @@ function renderHistory() {
     const innerRows = PLAYERS.map(player => {
       const slug = nameToSlug(player);
       const row  = allPredictionsCache.find(p => p.player_id === slug && p.match_id === matchId);
-      const b    = row?.points || { sign: 0, golesLocal: 0, golesVisitante: 0, firstScorer: 0, total: 0 };
+      const b    = row?.points || { sign: 0, exacto: 0, firstScorer: 0, total: 0 };
       return `
         <tr>
           <td>
@@ -979,10 +1017,9 @@ function renderHistory() {
               <span>${player}</span>
             </div>
           </td>
-          <td style="text-align:center">${b.sign           ? '✅' : '❌'}</td>
-          <td style="text-align:center">${b.golesLocal     ? '✅' : '❌'}</td>
-          <td style="text-align:center">${b.golesVisitante ? '✅' : '❌'}</td>
-          <td style="text-align:center">${b.firstScorer    ? '✅' : '❌'}</td>
+          <td style="text-align:center">${b.sign        ? '✅' : '❌'}</td>
+          <td style="text-align:center">${b.exacto      ? '✅' : '❌'}</td>
+          <td style="text-align:center">${b.firstScorer ? '✅' : '❌'}</td>
           <td style="text-align:right;font-weight:700;color:var(--accent)">${b.total} pts</td>
         </tr>
       `;
@@ -1005,8 +1042,7 @@ function renderHistory() {
               <tr>
                 <th>Jugador</th>
                 <th style="text-align:center">Signo</th>
-                <th style="text-align:center">G.L.</th>
-                <th style="text-align:center">G.V.</th>
+                <th style="text-align:center">Exacto</th>
                 <th style="text-align:center">Gol.</th>
                 <th style="text-align:right">Pts</th>
               </tr>
@@ -1320,7 +1356,7 @@ function renderJugadoresTab() {
     const matchRows = finishedMatches.map(m => {
       const result = storedResultsCache[m.id];
       const pred   = playerPreds[m.id];
-      const b      = pred?.points || { sign: 0, golesLocal: 0, golesVisitante: 0, firstScorer: 0, total: 0 };
+      const b      = pred?.points || { sign: 0, exacto: 0, firstScorer: 0, total: 0 };
 
       const predStr = pred
         ? `${pred.sign || '—'} · ${pred.goles_local ?? '—'}–${pred.goles_visitante ?? '—'} · ${pred.first_scorer || 'Ninguno'}`
@@ -1336,8 +1372,7 @@ function renderJugadoresTab() {
           </td>
           <td style="font-size:11px;color:var(--text-muted)">${predStr}</td>
           <td style="text-align:center">${hit(b.sign)}</td>
-          <td style="text-align:center">${hit(b.golesLocal)}</td>
-          <td style="text-align:center">${hit(b.golesVisitante)}</td>
+          <td style="text-align:center">${hit(b.exacto)}</td>
           <td style="text-align:center">${hit(b.firstScorer)}</td>
           <td style="text-align:right;font-weight:700;color:${b.total > 0 ? 'var(--accent)' : 'var(--text-muted)'}">${b.total}</td>
         </tr>
@@ -1362,8 +1397,7 @@ function renderJugadoresTab() {
                 <th>Partido</th>
                 <th>Tu apuesta</th>
                 <th style="text-align:center">1/X/2</th>
-                <th style="text-align:center">G.L.</th>
-                <th style="text-align:center">G.V.</th>
+                <th style="text-align:center">Exacto</th>
                 <th style="text-align:center">Gol.</th>
                 <th style="text-align:right">Pts</th>
               </tr>
@@ -1371,7 +1405,7 @@ function renderJugadoresTab() {
             <tbody>${matchRows}</tbody>
             <tfoot>
               <tr>
-                <td colspan="6" style="text-align:right;font-weight:600;padding-top:8px">Total</td>
+                <td colspan="5" style="text-align:right;font-weight:600;padding-top:8px">Total</td>
                 <td style="text-align:right;font-weight:700;color:var(--accent);padding-top:8px">${totalPts} pts</td>
               </tr>
             </tfoot>
