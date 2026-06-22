@@ -433,7 +433,7 @@ function getAllMatchesSorted() {
       list.push({ ...m, grupo, idx, id: `${grupo}-${idx}`, date: parseMatchDate(m.fecha, m.hora) });
     });
   });
-  list.sort((a, b) => a.date - b.date);
+  list.sort((a, b) => b.date - a.date);
   return list;
 }
 
