@@ -433,7 +433,7 @@ function getAllMatchesSorted() {
       list.push({ ...m, grupo, idx, id: `${grupo}-${idx}`, date: parseMatchDate(m.fecha, m.hora) });
     });
   });
-  list.sort((a, b) => b.date - a.date);
+  list.sort((a, b) => a.date - b.date);
   return list;
 }
 
@@ -1131,7 +1131,7 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
   const content = document.getElementById('apuestas-content');
   if (!content || !matchesData) return;
 
-  const allMatches = getAllMatchesSorted();
+  const allMatches = getAllMatchesSorted().reverse();
 
   // Build match predictions HTML
   const matchRows = allMatches.map(m => {
@@ -1281,7 +1281,7 @@ function renderMisApuestasContent(matchPreds, groupPreds, specPreds) {
   const el = document.getElementById('misapuestas-content');
   if (!el || !matchesData) return;
 
-  const allMatches = getAllMatchesSorted();
+  const allMatches = getAllMatchesSorted().reverse();
 
   // Todos los partidos donde haya pronóstico guardado (abiertos y cerrados)
   const matchRows = allMatches.map(m => {
