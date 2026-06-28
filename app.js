@@ -339,8 +339,7 @@ async function persistPrediction(grupo, idx) {
     sign:            p.sign           ?? null,
     goles_local:     p.golesLocal     ?? null,
     goles_visitante: p.golesVisitante ?? null,
-    first_scorer:    p.firstScorer    ?? null,
-    mvp_pred:        p.mvpPred        ?? null
+    first_scorer:    p.firstScorer    ?? null
   }, { onConflict: 'player_id,match_id' });
   if (error) throw error;
 }
