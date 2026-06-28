@@ -148,6 +148,24 @@
             </select>
           </div>
 
+          <!-- Campos exclusivos dieciseisavos (knockout) -->
+          <div id="knockout-fields" class="hidden">
+            <div class="form-group">
+              <label for="match-winner">¿Quién pasa? <span style="font-size:11px;color:var(--text-muted)">(obligatorio para eliminatorias)</span></label>
+              <select id="match-winner">
+                <option value="">— Selecciona —</option>
+                <option id="winner-opt-1" value="1">Equipo local</option>
+                <option id="winner-opt-2" value="2">Equipo visitante</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="match-mvp">🌟 MVP del partido</label>
+              <select id="match-mvp">
+                <option value="">Sin MVP / No seleccionado</option>
+              </select>
+            </div>
+          </div>
+
           <!-- Botón principal -->
           <button class="btn-process" id="btn-process" disabled>
             ⚡ Calcular y Repartir Puntos

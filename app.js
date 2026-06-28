@@ -255,9 +255,11 @@ async function loadSupabaseData() {
   matchResultsCache = {};
   (matchRes.data || []).forEach(r => {
     matchResultsCache[r.match_id] = {
-      golesLocal: r.goles_local,
+      golesLocal:    r.goles_local,
       golesVisitante: r.goles_visitante,
-      firstScorer: r.first_scorer
+      firstScorer:   r.first_scorer,
+      mvp:           r.mvp    || '',
+      winner:        r.winner || ''
     };
   });
 
@@ -278,11 +280,12 @@ async function loadSupabaseData() {
   if (predRes) {
     (predRes.data || []).forEach(r => {
       predictions[r.match_id] = {
-        sign: r.sign,
-        golesLocal: r.goles_local,
+        sign:           r.sign,
+        golesLocal:     r.goles_local,
         golesVisitante: r.goles_visitante,
-        firstScorer: r.first_scorer,
-        points: r.points
+        firstScorer:    r.first_scorer,
+        mvpPred:        r.mvp_pred || null,
+        points:         r.points
       };
     });
   }
@@ -331,12 +334,13 @@ async function persistPrediction(grupo, idx) {
   const key = `${grupo}-${idx}`;
   const p = predictions[key] || {};
   const { error } = await sb.from('predictions').upsert({
-    player_id: currentPlayerSlug,
-    match_id: key,
-    sign: p.sign ?? null,
-    goles_local: p.golesLocal ?? null,
+    player_id:       currentPlayerSlug,
+    match_id:        key,
+    sign:            p.sign           ?? null,
+    goles_local:     p.golesLocal     ?? null,
     goles_visitante: p.golesVisitante ?? null,
-    first_scorer: p.firstScorer ?? null
+    first_scorer:    p.firstScorer    ?? null,
+    mvp_pred:        p.mvpPred        ?? null
   }, { onConflict: 'player_id,match_id' });
   if (error) throw error;
 }
@@ -645,9 +649,10 @@ function renderMatchesForDate(fecha) {
 
 function renderMatchCard(m) {
   const { grupo, idx, local, visitante, fecha, hora } = m;
-  const pred   = getMatchPrediction(grupo, idx);
-  const status = getMatchLockStatus(fecha, hora, m.id);
-  const locked = status.locked;
+  const pred       = getMatchPrediction(grupo, idx);
+  const status     = getMatchLockStatus(fecha, hora, m.id);
+  const locked     = status.locked;
+  const isKnockout = grupo === 'D32';
 
   const localPlayers    = getPlayers(local);
   const visitantePlayers = getPlayers(visitante);
@@ -659,6 +664,27 @@ function renderMatchCard(m) {
 
   const scoreLoc = pred.golesLocal     != null ? pred.golesLocal     : null;
   const scoreVis = pred.golesVisitante != null ? pred.golesVisitante : null;
+
+  // Pre-generar opciones de MVP (evita backticks anidados en el template)
+  const mvpOptionsHtml = allPlayers.length > 0
+    ? `<optgroup label="${local}">${localPlayers.map(p => {
+        const full = `${p.nombre} ${p.apellido}`;
+        return `<option value="${full}" ${pred.mvpPred === full ? 'selected' : ''}>${full}</option>`;
+      }).join('')}</optgroup>
+      <optgroup label="${visitante}">${visitantePlayers.map(p => {
+        const full = `${p.nombre} ${p.apellido}`;
+        return `<option value="${full}" ${pred.mvpPred === full ? 'selected' : ''}>${full}</option>`;
+      }).join('')}</optgroup>`
+    : '<option value="" disabled>Sin jugadores disponibles</option>';
+
+  const mvpSelectHtml = isKnockout ? `
+    <div class="scorer-row">
+      <div class="scorer-label">🌟 MVP del partido</div>
+      <select class="scorer-select" id="mvp-${grupo}-${idx}" ${locked ? 'disabled' : ''}>
+        <option value="">Sin MVP / No seleccionado</option>
+        ${mvpOptionsHtml}
+      </select>
+    </div>` : '';
 
   card.innerHTML = `
     <div class="match-card-header">
@@ -693,14 +719,15 @@ function renderMatchCard(m) {
 
       <!-- Sign selector -->
       <div class="sign-row">
-        ${['1', 'X', '2'].map(s => {
+        ${(isKnockout ? ['1', '2'] : ['1', 'X', '2']).map(s => {
           const labelText = s === '1' ? local : s === '2' ? visitante : 'Empate';
           const isActive  = pred.sign === s;
           return `<button class="sign-btn${isActive ? ' active' : ''}" data-sign="${s}" data-grupo="${grupo}" data-idx="${idx}" ${locked ? 'disabled' : ''}>
-            <span class="sign-key">${s}</span>
+            <span class="sign-key">${isKnockout ? (s === '1' ? '1' : '2') : s}</span>
             <span>${labelText.length > 10 ? labelText.substring(0, 9) + '…' : labelText}</span>
           </button>`;
         }).join('')}
+        ${isKnockout ? '<span class="sign-no-draw-note">Sin empate</span>' : ''}
       </div>
 
       <!-- First scorer -->
@@ -724,6 +751,8 @@ function renderMatchCard(m) {
           ` : '<option value="" disabled>Sin jugadores disponibles</option>'}
         </select>
       </div>
+
+      ${mvpSelectHtml}
 
       ${locked ? '<div class="match-locked-note">🔒 Este partido está cerrado. No puedes modificar el pronóstico.</div>' : ''}
       ${!locked && currentPlayerSlug ? `<button class="btn-save-pred" id="save-btn-${grupo}-${idx}">💾 Guardar apuesta</button>` : ''}

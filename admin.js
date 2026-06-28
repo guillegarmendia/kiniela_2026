@@ -152,7 +152,9 @@ async function refreshAdminData() {
       golesLocal:     r.goles_local,
       golesVisitante: r.goles_visitante,
       firstScorer:    r.first_scorer,
-      realSign:       calcRealSign(r.goles_local, r.goles_visitante)
+      mvp:            r.mvp    || '',
+      winner:         r.winner || '',
+      realSign:       r.winner || calcRealSign(r.goles_local, r.goles_visitante)
     };
   });
 
@@ -316,13 +318,15 @@ function handleMatchSelect() {
   if (!matchId) {
     resetScoreInputs();
     btnProcess.disabled = true;
+    document.getElementById('knockout-fields').classList.add('hidden');
     return;
   }
 
   btnProcess.disabled = false;
 
-  const match = allMatchesSorted.find(m => m.id === matchId);
+  const match      = allMatchesSorted.find(m => m.id === matchId);
   if (!match) return;
+  const isKnockout = matchId.startsWith('D32-');
 
   document.getElementById('label-local').textContent   = `${flag(match.local)} ${match.local}`;
   document.getElementById('label-visitor').textContent = `${flag(match.visitante)} ${match.visitante}`;
@@ -337,6 +341,19 @@ function handleMatchSelect() {
   }
 
   populateScorerDropdown(match, prev ? prev.firstScorer : '');
+
+  // Campos exclusivos de knockout (dieciseisavos)
+  const knockoutFields = document.getElementById('knockout-fields');
+  if (isKnockout) {
+    knockoutFields.classList.remove('hidden');
+    // Opciones de "quién pasa"
+    document.getElementById('winner-opt-1').textContent = match.local;
+    document.getElementById('winner-opt-2').textContent = match.visitante;
+    document.getElementById('match-winner').value = prev?.winner || '';
+    populateMvpDropdown(match, prev?.mvp || '');
+  } else {
+    knockoutFields.classList.add('hidden');
+  }
 }
 
 function populateScorerDropdown(match, current = '') {
@@ -346,6 +363,35 @@ function populateScorerDropdown(match, current = '') {
   const noneOpt        = document.createElement('option');
   noneOpt.value        = '';
   noneOpt.textContent  = 'Ninguno (0-0 o sin goles)';
+  sel.appendChild(noneOpt);
+
+  const addGroup = (teamName) => {
+    const players = getPlayersForTeam(teamName);
+    if (players.length === 0) return;
+    const group   = document.createElement('optgroup');
+    group.label   = `${flag(teamName)} ${teamName}`;
+    players.forEach(p => {
+      const full      = `${p.nombre} ${p.apellido}`;
+      const opt       = document.createElement('option');
+      opt.value       = full;
+      opt.textContent = full;
+      if (full === current) opt.selected = true;
+      group.appendChild(opt);
+    });
+    sel.appendChild(group);
+  };
+
+  addGroup(match.local);
+  addGroup(match.visitante);
+}
+
+function populateMvpDropdown(match, current = '') {
+  const sel = document.getElementById('match-mvp');
+  sel.innerHTML = '';
+
+  const noneOpt       = document.createElement('option');
+  noneOpt.value       = '';
+  noneOpt.textContent = 'Sin MVP / No seleccionado';
   sel.appendChild(noneOpt);
 
   const addGroup = (teamName) => {
@@ -452,14 +498,17 @@ function calcRealSign(golesLocal, golesVisitante) {
 
 /**
  * Calcula los puntos de un pronóstico de partido.
- * Máximo: 8 pts (signo 1 + resultado exacto 4 + goleador 3).
+ * Grupos  – máx 8 pts: signo 1 + exacto 4 + goleador 3
+ * Knockout– máx 11 pts: signo 2 + exacto 4 + goleador 3 + MVP 2
  *
- * @param {object} pred   - { sign, golesLocal, golesVisitante, firstScorer }
- * @param {object} result - { golesLocal, golesVisitante, firstScorer, realSign }
- * @returns {object} { sign, exacto, firstScorer, total }
+ * @param {object}  pred       - { sign, golesLocal, golesVisitante, firstScorer, mvpPred }
+ * @param {object}  result     - { golesLocal, golesVisitante, firstScorer, mvp, realSign }
+ * @param {boolean} isKnockout - true para partidos de eliminatoria (D32)
+ * @returns {object} { sign, exacto, firstScorer, mvp, total }
  */
-function calcMatchPoints(pred, result) {
-  const signPts  = (pred.sign === result.realSign) ? 1 : 0;
+function calcMatchPoints(pred, result, isKnockout = false) {
+  const signPts = (pred.sign === result.realSign) ? (isKnockout ? 2 : 1) : 0;
+
   const exactoPts = (
     pred.golesLocal     != null && pred.golesLocal     === result.golesLocal &&
     pred.golesVisitante != null && pred.golesVisitante === result.golesVisitante
@@ -468,18 +517,25 @@ function calcMatchPoints(pred, result) {
   let firstScorerPts = 0;
   const predScorer   = pred.firstScorer || '';
   const realScorer   = result.firstScorer || '';
-
   if (realScorer === '' && predScorer === '') {
     firstScorerPts = 3;
   } else if (realScorer !== '' && predScorer === realScorer) {
     firstScorerPts = 3;
   }
 
+  let mvpPts = 0;
+  if (isKnockout) {
+    const predMvp = pred.mvpPred || '';
+    const realMvp = result.mvp   || '';
+    if (realMvp !== '' && predMvp === realMvp) mvpPts = 2;
+  }
+
   return {
     sign:        signPts,
     exacto:      exactoPts,
     firstScorer: firstScorerPts,
-    total:       signPts + exactoPts + firstScorerPts
+    mvp:         mvpPts,
+    total:       signPts + exactoPts + firstScorerPts + mvpPts
   };
 }
 
@@ -518,7 +574,10 @@ function calcGroupPoints(userPred, realOrder) {
  * @returns {Array} rowData para renderResultsTable()
  */
 async function processMatch(matchId, result) {
-  const realSign   = calcRealSign(result.golesLocal, result.golesVisitante);
+  const isKnockout = matchId.startsWith('D32-');
+  // Para knockout, el admin proporciona explícitamente quién pasa ('1' o '2');
+  // si no se facilita, se deduce del marcador (útil para partidos de grupos).
+  const realSign   = result.winner || calcRealSign(result.golesLocal, result.golesVisitante);
   const fullResult = { ...result, realSign };
 
   // Cargar predicciones de este partido y puntos actuales de todos los jugadores en paralelo
@@ -545,11 +604,14 @@ async function processMatch(matchId, result) {
       golesLocal:     existingRow.goles_local,
       golesVisitante: existingRow.goles_visitante,
       firstScorer:    existingRow.first_scorer,
+      mvpPred:        existingRow.mvp_pred || null,
       points:         existingRow.points
     } : {};
 
     // Si el jugador no guardó ningún pronóstico, 0 puntos en todo
-    const breakdown = existingRow ? calcMatchPoints(pred, fullResult) : { sign: 0, exacto: 0, firstScorer: 0, total: 0 };
+    const breakdown = existingRow
+      ? calcMatchPoints(pred, fullResult, isKnockout)
+      : { sign: 0, exacto: 0, firstScorer: 0, mvp: 0, total: 0 };
     let total = existingPts[slug] || 0;
 
     // Restar puntos previos si el partido ya había sido evaluado
@@ -560,10 +622,11 @@ async function processMatch(matchId, result) {
     predUpserts.push({
       player_id:       slug,
       match_id:        matchId,
-      sign:            pred.sign          ?? null,
-      goles_local:     pred.golesLocal    ?? null,
+      sign:            pred.sign           ?? null,
+      goles_local:     pred.golesLocal     ?? null,
       goles_visitante: pred.golesVisitante ?? null,
-      first_scorer:    pred.firstScorer   ?? null,
+      first_scorer:    pred.firstScorer    ?? null,
+      mvp_pred:        pred.mvpPred        ?? null,
       points:          breakdown
     });
 
@@ -584,7 +647,9 @@ async function processMatch(matchId, result) {
       match_id:        matchId,
       goles_local:     result.golesLocal,
       goles_visitante: result.golesVisitante,
-      first_scorer:    result.firstScorer || null
+      first_scorer:    result.firstScorer || null,
+      mvp:             result.mvp         || null,
+      winner:          result.winner      || null
     }, { onConflict: 'match_id' }),
     sb.from('predictions').upsert(predUpserts, { onConflict: 'player_id,match_id' }),
     sb.from('player_points').upsert(ptsUpserts, { onConflict: 'player_id' })
@@ -746,6 +811,9 @@ function handleProcessClick() {
   const golesLocalStr = document.getElementById('goals-local').value;
   const golesVisStr   = document.getElementById('goals-visitor').value;
   const firstScorer   = document.getElementById('first-scorer').value;
+  const isKnockout    = matchId.startsWith('D32-');
+  const winner        = isKnockout ? document.getElementById('match-winner').value : '';
+  const mvp           = isKnockout ? document.getElementById('match-mvp').value    : '';
 
   if (!matchId) {
     showToast('Selecciona un partido primero.', 'error');
@@ -769,7 +837,12 @@ function handleProcessClick() {
     return;
   }
 
-  const result = { golesLocal, golesVisitante, firstScorer };
+  if (isKnockout && !winner) {
+    showToast('Selecciona quién pasa antes de continuar.', 'error');
+    return;
+  }
+
+  const result = { golesLocal, golesVisitante, firstScorer, mvp, winner };
   showConfirmModal(matchId, result);
 }
 
@@ -795,7 +868,9 @@ async function recalcularTodosPartidos() {
       await processMatch(r.match_id, {
         golesLocal:     r.goles_local,
         golesVisitante: r.goles_visitante,
-        firstScorer:    r.first_scorer || ''
+        firstScorer:    r.first_scorer || '',
+        mvp:            r.mvp          || '',
+        winner:         r.winner       || ''
       });
     }
 
@@ -865,16 +940,20 @@ function renderResultsTable(matchId, result, rowData) {
     ? `⚡ Primer goleador: ${result.firstScorer}`
     : 'Sin goles';
 
-  const signLabel = result.realSign === '1'
-    ? `Gana ${match.local}`
+  const isKnockout = matchId.startsWith('D32-');
+  const signLabel  = result.realSign === '1'
+    ? `Pasa ${match.local}`
     : result.realSign === '2'
-    ? `Gana ${match.visitante}`
+    ? `Pasa ${match.visitante}`
     : 'Empate';
+
+  const mvpText = isKnockout && result.mvp ? `🌟 MVP: ${result.mvp}` : '';
 
   summary.innerHTML = `
     <div class="match-result-info">
       <strong>${flag(match.local)} ${match.local} ${result.golesLocal} – ${result.golesVisitante} ${match.visitante} ${flag(match.visitante)}</strong>
-      Signo: <strong>${result.realSign}</strong> (${signLabel}) &nbsp;·&nbsp; ${scorerText}
+      ${isKnockout ? 'Pasa:' : 'Signo:'} <strong>${result.realSign}</strong> (${signLabel}) &nbsp;·&nbsp; ${scorerText}
+      ${mvpText ? `&nbsp;·&nbsp; ${mvpText}` : ''}
     </div>
     <div class="results-table-wrap">
       <table class="results-table">
@@ -882,9 +961,10 @@ function renderResultsTable(matchId, result, rowData) {
           <tr>
             <th>Jugador</th>
             <th>Su pronóstico</th>
-            <th>Signo</th>
+            <th>${isKnockout ? 'Pasa' : 'Signo'}</th>
             <th>Exacto</th>
             <th>Goleador</th>
+            ${isKnockout ? '<th>MVP</th>' : ''}
             <th>Total</th>
           </tr>
         </thead>
@@ -897,6 +977,7 @@ function renderResultsTable(matchId, result, rowData) {
             const predVis  = p.golesVisitante  != null ? p.golesVisitante  : '—';
             const predScore = `${predLoc}–${predVis}`;
             const predGoal  = p.firstScorer || 'Ninguno';
+            const predMvp   = p.mvpPred     || 'Ninguno';
             const color     = playerColor(row.player);
             const initial   = getInitial(row.player);
             return `
@@ -907,10 +988,11 @@ function renderResultsTable(matchId, result, rowData) {
                     <span>${row.player}</span>
                   </div>
                 </td>
-                <td style="color:var(--text-muted);font-size:12px">${predSign} · ${predScore} · ${predGoal}</td>
+                <td style="color:var(--text-muted);font-size:12px">${predSign} · ${predScore} · ${predGoal}${isKnockout ? ' · ' + predMvp : ''}</td>
                 <td><span class="${b.sign        ? 'check-icon' : 'cross-icon'}">${b.sign        ? '✅' : '❌'} +${b.sign}</span></td>
                 <td><span class="${b.exacto      ? 'check-icon' : 'cross-icon'}">${b.exacto      ? '✅' : '❌'} +${b.exacto}</span></td>
                 <td><span class="${b.firstScorer ? 'check-icon' : 'cross-icon'}">${b.firstScorer ? '✅' : '❌'} +${b.firstScorer}</span></td>
+                ${isKnockout ? `<td><span class="${b.mvp ? 'check-icon' : 'cross-icon'}">${b.mvp ? '✅' : '❌'} +${b.mvp ?? 0}</span></td>` : ''}
                 <td><span class="pts-badge">+${b.total} pts</span></td>
               </tr>
             `;
