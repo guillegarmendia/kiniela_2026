@@ -1205,18 +1205,25 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
   // Use the general deadline (not player-specific) for the view tab — editing deadlines are handled in the Grupos tab
   const groups = Object.keys(matchesData.grupos || {}).sort();
   const groupsUnlocked = nowInMadrid() >= GROUPS_DEADLINE;
+  let totalGroupPoints = 0;
   const groupCards = groupsUnlocked ? groups.map(g => {
     const positions = groupPreds[g];
     if (!positions || positions.length === 0) return '';
+    const realPos = groupResultsCache[g];
+    const byPos = positions.map((team, i) => !!(realPos && realPos[i] === team));
+    const grpPts = byPos.filter(Boolean).length;
+    totalGroupPoints += grpPts;
+    const ptsBadge = (realPos && grpPts > 0) ? `<span class="group-pts-badge">+${grpPts} pts</span>` : '';
     return `
       <div class="apuesta-group-card">
-        <div class="apuesta-group-title">Grupo ${g}</div>
+        <div class="apuesta-group-title">Grupo ${g}${ptsBadge}</div>
         <div class="apuesta-group-teams">
           ${positions.map((team, i) => `
             <div class="apuesta-group-row">
               <span class="group-pos">${getPositionLabel(i)}</span>
               <span class="group-flag">${flag(team)}</span>
               <span class="group-name">${team}</span>
+              ${byPos[i] ? '<span class="group-check">✅</span>' : ''}
             </div>
           `).join('')}
         </div>
@@ -1257,7 +1264,7 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
     <div class="section-header" style="margin-top:4px"><h3>Pronósticos de Partidos</h3></div>
     ${matchRows || '<div class="empty-state" style="padding:20px 0"><p>Sin pronósticos de partidos guardados</p></div>'}
 
-    <div class="section-header" style="margin-top:16px"><h3>Clasificaciones de Grupos</h3></div>
+    <div class="section-header" style="margin-top:16px"><h3>Clasificaciones de Grupos${totalGroupPoints > 0 ? ` <span class="section-pts-total">+${totalGroupPoints} pts</span>` : ''}</h3></div>
     <div class="apuesta-groups-grid">
       ${groupCards !== null ? (groupCards || '<div class="empty-state" style="padding:20px 0"><p>Sin clasificaciones guardadas</p></div>') : lockedUntilMsg}
     </div>
@@ -1356,18 +1363,25 @@ function renderMisApuestasContent(matchPreds, groupPreds, specPreds) {
 
   // Grupos
   const grupos = Object.keys(matchesData.grupos || {}).sort();
+  let totalGroupPoints = 0;
   const groupCards = grupos.map(g => {
     const positions = groupPreds[g];
     if (!positions || positions.length === 0) return '';
+    const realPos = groupResultsCache[g];
+    const byPos = positions.map((team, i) => !!(realPos && realPos[i] === team));
+    const grpPts = byPos.filter(Boolean).length;
+    totalGroupPoints += grpPts;
+    const ptsBadge = (realPos && grpPts > 0) ? `<span class="group-pts-badge">+${grpPts} pts</span>` : '';
     return `
       <div class="apuesta-group-card">
-        <div class="apuesta-group-title">Grupo ${g}</div>
+        <div class="apuesta-group-title">Grupo ${g}${ptsBadge}</div>
         <div class="apuesta-group-teams">
           ${positions.map((team, i) => `
             <div class="apuesta-group-row">
               <span class="group-pos">${getPositionLabel(i)}</span>
               <span class="group-flag">${flag(team)}</span>
               <span class="group-name">${team}</span>
+              ${byPos[i] ? '<span class="group-check">✅</span>' : ''}
             </div>`).join('')}
         </div>
       </div>`;
@@ -1399,7 +1413,7 @@ function renderMisApuestasContent(matchPreds, groupPreds, specPreds) {
     <div class="section-header" style="margin-top:4px"><h3>Pronósticos de Partidos</h3></div>
     ${matchRows || '<div class="empty-state" style="padding:20px 0"><p>Sin pronósticos guardados</p></div>'}
 
-    <div class="section-header" style="margin-top:16px"><h3>Clasificaciones de Grupos</h3></div>
+    <div class="section-header" style="margin-top:16px"><h3>Clasificaciones de Grupos${totalGroupPoints > 0 ? ` <span class="section-pts-total">+${totalGroupPoints} pts</span>` : ''}</h3></div>
     <div class="apuesta-groups-grid">
       ${groupCards || '<div class="empty-state" style="padding:20px 0"><p>Sin clasificaciones guardadas</p></div>'}
     </div>
