@@ -803,6 +803,34 @@ input, select { font-family: inherit; }
   padding: 2px 8px; vertical-align: middle;
 }
 
+/* ── Apuestas accordion (Fase de grupos / Knockouts) ── */
+.apuesta-accordion {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.apuesta-accordion-summary {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 14px; font-weight: 700; color: var(--text);
+  background: var(--card);
+  list-style: none;
+  user-select: none;
+}
+.apuesta-accordion-summary::-webkit-details-marker { display: none; }
+.accordion-chevron {
+  margin-left: auto; font-size: 16px; color: var(--text-muted);
+  transition: transform 0.2s;
+}
+details[open] > .apuesta-accordion-summary .accordion-chevron {
+  transform: rotate(180deg);
+}
+.apuesta-accordion-body {
+  border-top: 1px solid var(--border);
+}
+
 /* 5-button nav adjustment */
 @media (max-width: 380px) {
   .nav-label { font-size: 9px; }

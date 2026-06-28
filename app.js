@@ -1167,24 +1167,19 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
 
   const allMatches = getAllMatchesSorted().reverse();
 
-  // Build match predictions HTML
-  const matchRows = allMatches.map(m => {
-    const pred = matchPreds[m.id] || {};
+  // Build match predictions HTML — split into group stage vs knockout
+  function buildApuestaRow(m, pred) {
     const hasPred = pred.sign || pred.golesLocal != null || pred.golesVisitante != null;
-    if (!hasPred) return '';
-
-    if (!isMatchLocked(m.fecha, m.hora)) return '';
-
+    if (!hasPred || !isMatchLocked(m.fecha, m.hora)) return '';
     const signLabel = pred.sign === '1' ? m.local : pred.sign === '2' ? m.visitante : pred.sign === 'X' ? 'Empate' : '—';
     const signBadgeClass = pred.sign === '1' ? 'sign-1' : pred.sign === '2' ? 'sign-2' : 'sign-x';
     const scoreStr = (pred.golesLocal != null && pred.golesVisitante != null)
-      ? `${pred.golesLocal} – ${pred.golesVisitante}`
-      : '— – —';
-
+      ? `${pred.golesLocal} – ${pred.golesVisitante}` : '— – —';
+    const phaseBadge = m.grupo === 'D32' ? 'Dieciseisavos' : `Grupo ${m.grupo}`;
     return `
       <div class="apuesta-match-row">
         <div class="apuesta-match-header">
-          <span class="match-group-badge">Grupo ${m.grupo}</span>
+          <span class="match-group-badge">${phaseBadge}</span>
           <span class="apuesta-match-date">${m.fecha} · ${m.hora}</span>
         </div>
         <div class="apuesta-match-teams-row">
@@ -1197,9 +1192,11 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
           <span class="apuesta-score-badge">${scoreStr}</span>
           ${pred.firstScorer ? `<span class="apuesta-scorer-badge">⚡ ${pred.firstScorer}</span>` : ''}
         </div>
-      </div>
-    `;
-  }).filter(Boolean).join('');
+      </div>`;
+  }
+
+  const grupoRows    = allMatches.filter(m => m.grupo !== 'D32').map(m => buildApuestaRow(m, matchPreds[m.id] || {})).filter(Boolean).join('');
+  const knockoutRows = allMatches.filter(m => m.grupo === 'D32').map(m => buildApuestaRow(m, matchPreds[m.id] || {})).filter(Boolean).join('');
 
   // Build group predictions HTML
   // Use the general deadline (not player-specific) for the view tab — editing deadlines are handled in the Grupos tab
@@ -1262,7 +1259,26 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
     </div>
 
     <div class="section-header" style="margin-top:4px"><h3>Pronósticos de Partidos</h3></div>
-    ${matchRows || '<div class="empty-state" style="padding:20px 0"><p>Sin pronósticos de partidos guardados</p></div>'}
+
+    <details class="apuesta-accordion">
+      <summary class="apuesta-accordion-summary">
+        ⚽ Fase de grupos
+        <span class="accordion-chevron">▾</span>
+      </summary>
+      <div class="apuesta-accordion-body">
+        ${grupoRows || '<div class="empty-state" style="padding:16px"><p>Sin pronósticos de fase de grupos</p></div>'}
+      </div>
+    </details>
+
+    <details class="apuesta-accordion" open>
+      <summary class="apuesta-accordion-summary">
+        🏆 Knockouts
+        <span class="accordion-chevron">▾</span>
+      </summary>
+      <div class="apuesta-accordion-body">
+        ${knockoutRows || '<div class="empty-state" style="padding:16px"><p>Sin pronósticos de eliminatorias</p></div>'}
+      </div>
+    </details>
 
     <div class="section-header" style="margin-top:16px"><h3>Clasificaciones de Grupos${totalGroupPoints > 0 ? ` <span class="section-pts-total">+${totalGroupPoints} pts</span>` : ''}</h3></div>
     <div class="apuesta-groups-grid">
@@ -1325,26 +1341,23 @@ function renderMisApuestasContent(matchPreds, groupPreds, specPreds) {
   const allMatches = getAllMatchesSorted().reverse();
 
   // Todos los partidos donde haya pronóstico guardado (abiertos y cerrados)
-  const matchRows = allMatches.map(m => {
-    const pred = matchPreds[m.id];
+  function buildMisApuestaRow(m, pred) {
     if (!pred) return '';
     const hasPred = pred.sign || pred.golesLocal != null || pred.golesVisitante != null;
     if (!hasPred) return '';
-
     const locked = isMatchLocked(m.fecha, m.hora);
     const signLabel = pred.sign === '1' ? m.local : pred.sign === '2' ? m.visitante : pred.sign === 'X' ? 'Empate' : '—';
     const signBadgeClass = pred.sign === '1' ? 'sign-1' : pred.sign === '2' ? 'sign-2' : 'sign-x';
     const scoreStr = (pred.golesLocal != null && pred.golesVisitante != null)
-      ? `${pred.golesLocal} – ${pred.golesVisitante}`
-      : '— – —';
+      ? `${pred.golesLocal} – ${pred.golesVisitante}` : '— – —';
     const statusBadge = locked
       ? '<span style="font-size:10px;color:var(--text-muted)">🔒</span>'
       : '<span style="font-size:10px;color:var(--success)">🟢</span>';
-
+    const phaseBadge = m.grupo === 'D32' ? 'Dieciseisavos' : `Grupo ${m.grupo}`;
     return `
       <div class="apuesta-match-row">
         <div class="apuesta-match-header">
-          <span class="match-group-badge">Grupo ${m.grupo}</span>
+          <span class="match-group-badge">${phaseBadge}</span>
           <span class="apuesta-match-date">${m.fecha} · ${m.hora}</span>
           ${statusBadge}
         </div>
@@ -1359,7 +1372,10 @@ function renderMisApuestasContent(matchPreds, groupPreds, specPreds) {
           ${pred.firstScorer ? `<span class="apuesta-scorer-badge">⚡ ${pred.firstScorer}</span>` : ''}
         </div>
       </div>`;
-  }).filter(Boolean).join('');
+  }
+
+  const grupoRows    = allMatches.filter(m => m.grupo !== 'D32').map(m => buildMisApuestaRow(m, matchPreds[m.id])).filter(Boolean).join('');
+  const knockoutRows = allMatches.filter(m => m.grupo === 'D32').map(m => buildMisApuestaRow(m, matchPreds[m.id])).filter(Boolean).join('');
 
   // Grupos
   const grupos = Object.keys(matchesData.grupos || {}).sort();
@@ -1411,7 +1427,26 @@ function renderMisApuestasContent(matchPreds, groupPreds, specPreds) {
     </div>
 
     <div class="section-header" style="margin-top:4px"><h3>Pronósticos de Partidos</h3></div>
-    ${matchRows || '<div class="empty-state" style="padding:20px 0"><p>Sin pronósticos guardados</p></div>'}
+
+    <details class="apuesta-accordion">
+      <summary class="apuesta-accordion-summary">
+        ⚽ Fase de grupos
+        <span class="accordion-chevron">▾</span>
+      </summary>
+      <div class="apuesta-accordion-body">
+        ${grupoRows || '<div class="empty-state" style="padding:16px"><p>Sin pronósticos de fase de grupos</p></div>'}
+      </div>
+    </details>
+
+    <details class="apuesta-accordion" open>
+      <summary class="apuesta-accordion-summary">
+        🏆 Knockouts
+        <span class="accordion-chevron">▾</span>
+      </summary>
+      <div class="apuesta-accordion-body">
+        ${knockoutRows || '<div class="empty-state" style="padding:16px"><p>Sin pronósticos de eliminatorias</p></div>'}
+      </div>
+    </details>
 
     <div class="section-header" style="margin-top:16px"><h3>Clasificaciones de Grupos${totalGroupPoints > 0 ? ` <span class="section-pts-total">+${totalGroupPoints} pts</span>` : ''}</h3></div>
     <div class="apuesta-groups-grid">
