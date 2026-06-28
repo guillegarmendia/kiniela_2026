@@ -339,7 +339,8 @@ async function persistPrediction(grupo, idx) {
     sign:            p.sign           ?? null,
     goles_local:     p.golesLocal     ?? null,
     goles_visitante: p.golesVisitante ?? null,
-    first_scorer:    p.firstScorer    ?? null
+    first_scorer:    p.firstScorer    ?? null,
+    mvp_pred:        p.mvpPred        ?? null
   }, { onConflict: 'player_id,match_id' });
   if (error) throw error;
 }
@@ -839,6 +840,15 @@ function renderMatchCard(m) {
     });
   }
 
+  // MVP select (knockout only)
+  const mvpSel = card.querySelector(`#mvp-${grupo}-${idx}`);
+  if (mvpSel) {
+    mvpSel.addEventListener('change', () => {
+      if (!currentPlayerSlug) return;
+      updatePrediction(grupo, idx, { mvpPred: mvpSel.value });
+    });
+  }
+
   // Live badge countdown
   if (status.live && status.lockTime) {
     const badgeEl = card.querySelector(`[data-badge="${grupo}-${idx}"]`);
@@ -1190,6 +1200,7 @@ function renderApuestasContent(_playerSlug, matchPreds, groupPreds, specPreds = 
           ${pred.sign ? `<span class="apuesta-sign-badge ${signBadgeClass}">${pred.sign} · ${signLabel}</span>` : ''}
           <span class="apuesta-score-badge">${scoreStr}</span>
           ${pred.firstScorer ? `<span class="apuesta-scorer-badge">⚡ ${pred.firstScorer}</span>` : ''}
+          ${pred.mvpPred ? `<span class="apuesta-scorer-badge">🌟 ${pred.mvpPred}</span>` : ''}
         </div>
       </div>`;
   }
@@ -1317,7 +1328,8 @@ async function renderMisApuestasTab() {
         sign: r.sign,
         golesLocal: r.goles_local,
         golesVisitante: r.goles_visitante,
-        firstScorer: r.first_scorer
+        firstScorer: r.first_scorer,
+        mvpPred: r.mvp_pred || null
       };
     });
 
@@ -1369,6 +1381,7 @@ function renderMisApuestasContent(matchPreds, groupPreds, specPreds) {
           ${pred.sign ? `<span class="apuesta-sign-badge ${signBadgeClass}">${pred.sign} · ${signLabel}</span>` : ''}
           <span class="apuesta-score-badge">${scoreStr}</span>
           ${pred.firstScorer ? `<span class="apuesta-scorer-badge">⚡ ${pred.firstScorer}</span>` : ''}
+          ${pred.mvpPred ? `<span class="apuesta-scorer-badge">🌟 ${pred.mvpPred}</span>` : ''}
         </div>
       </div>`;
   }
