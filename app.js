@@ -1622,7 +1622,8 @@ const SPECIAL_FIELDS = [
 
 // ── Jugadores Tab ────────────────────────────────────────────
 
-let jugadoresCache = null; // { playerSlug: { matchId: predRow } }
+let jugadoresCache      = null; // { playerSlug: { matchId: predRow } }
+let jugadoresGrpCache   = null; // { playerSlug: { grupo: grpPredRow } }
 
 async function renderJugadoresTab() {
   const el = document.getElementById('jugadores-content');
@@ -1635,29 +1636,38 @@ async function renderJugadoresTab() {
     return;
   }
 
-  // Cargar predicciones de todos los partidos finalizados (una sola query)
-  if (!jugadoresCache) {
+  // Cargar predicciones de partidos finalizados y de grupos en paralelo
+  if (!jugadoresCache || !jugadoresGrpCache) {
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando…</p></div>';
     const matchIds = finished.map(m => m.id);
-    const { data } = await sb.from('predictions').select('*').in('match_id', matchIds);
+    const [{ data: predData }, { data: grpData }] = await Promise.all([
+      sb.from('predictions').select('*').in('match_id', matchIds),
+      sb.from('group_predictions').select('*').eq('evaluated', true)
+    ]);
     jugadoresCache = {};
-    (data || []).forEach(r => {
+    (predData || []).forEach(r => {
       if (!jugadoresCache[r.player_id]) jugadoresCache[r.player_id] = {};
       jugadoresCache[r.player_id][r.match_id] = r;
     });
+    jugadoresGrpCache = {};
+    (grpData || []).forEach(r => {
+      if (!jugadoresGrpCache[r.player_id]) jugadoresGrpCache[r.player_id] = {};
+      jugadoresGrpCache[r.player_id][r.grupo] = r;
+    });
   }
 
-  // Ordenar jugadores por puntos totales en partidos finalizados (desc)
-  const ranked = [...PLAYERS].sort((a, b) => {
-    const ptsA = Object.values(jugadoresCache[nameToSlug(a)] || {}).reduce((s, r) => s + (r.points?.total || 0), 0);
-    const ptsB = Object.values(jugadoresCache[nameToSlug(b)] || {}).reduce((s, r) => s + (r.points?.total || 0), 0);
-    return ptsB - ptsA;
-  });
+  // Ordenar jugadores por puntos totales reales (partidos + grupos + especiales)
+  const ranked = [...PLAYERS].sort((a, b) =>
+    getTotalPoints(nameToSlug(b)) - getTotalPoints(nameToSlug(a))
+  );
 
   el.innerHTML = ranked.map(player => {
-    const slug  = nameToSlug(player);
-    const preds = jugadoresCache[slug] || {};
-    const total = Object.values(preds).reduce((s, r) => s + (r.points?.total || 0), 0);
+    const slug    = nameToSlug(player);
+    const preds   = jugadoresCache[slug] || {};
+    const grpPreds = jugadoresGrpCache[slug] || {};
+    const matchPts = Object.values(preds).reduce((s, r) => s + (r.points?.total || 0), 0);
+    const groupPts = Object.values(grpPreds).reduce((s, r) => s + (r.points?.total || 0), 0);
+    const total    = getTotalPoints(slug);
 
     const rows = finished.map(m => {
       const result = matchResultsCache[m.id];
@@ -1693,7 +1703,10 @@ async function renderJugadoresTab() {
             <div class="player-av-sm" style="background:${playerColor(player)}">${getInitial(player)}</div>
             <span class="hist-player-name-txt">${player}</span>
           </div>
-          <span style="font-size:12px;color:var(--text-muted);margin-left:auto">${finished.length} partidos</span>
+          <span style="font-size:12px;color:var(--text-muted);margin-left:auto;display:flex;gap:6px;align-items:center">
+            ${matchPts > 0 ? `<span title="Puntos de partidos">⚽ ${matchPts}</span>` : ''}
+            ${groupPts > 0 ? `<span title="Puntos de grupos">📊 ${groupPts}</span>` : ''}
+          </span>
           <strong class="hist-score" style="min-width:55px;text-align:right">${total} pts</strong>
           <span class="hist-chevron" id="jug-chevron-${slug}">›</span>
         </button>
