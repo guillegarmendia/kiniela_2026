@@ -255,8 +255,19 @@ function buildAllMatchesSorted() {
         grupo,
         idx,
         id: `${grupo}-${idx}`,
+        fase: `Grupo ${grupo}`,
         date: parseMatchDate(m.fecha, m.hora)
       });
+    });
+  });
+  (matchesData.dieciseisavos || []).forEach((m, idx) => {
+    allMatchesSorted.push({
+      ...m,
+      grupo: 'D32',
+      idx,
+      id: `D32-${idx}`,
+      fase: 'Dieciseisavos',
+      date: parseMatchDate(m.fecha, m.hora)
     });
   });
   allMatchesSorted.sort((a, b) => a.date - b.date);
@@ -288,7 +299,7 @@ function populateMatchSelect() {
   allMatchesSorted.forEach(m => {
     const isFinished = !!storedResultsCache[m.id];
     const prefix     = isFinished ? '✅ ' : '';
-    const label      = `${prefix}Grupo ${m.grupo}: ${m.local} vs ${m.visitante} (${m.fecha}, ${m.hora})`;
+    const label      = `${prefix}${m.fase || ('Grupo ' + m.grupo)}: ${m.local} vs ${m.visitante} (${m.fecha}, ${m.hora})`;
     const opt        = document.createElement('option');
     opt.value        = m.id;
     opt.textContent  = label;

@@ -422,6 +422,9 @@ function countOpenMatches() {
       if (!isMatchLocked(m.fecha, m.hora)) count++;
     });
   });
+  (matchesData.dieciseisavos || []).forEach(m => {
+    if (!isMatchLocked(m.fecha, m.hora)) count++;
+  });
   return count;
 }
 
@@ -430,8 +433,11 @@ function getAllMatchesSorted() {
   const list = [];
   Object.entries(matchesData.grupos).forEach(([grupo, matches]) => {
     matches.forEach((m, idx) => {
-      list.push({ ...m, grupo, idx, id: `${grupo}-${idx}`, date: parseMatchDate(m.fecha, m.hora) });
+      list.push({ ...m, grupo, idx, id: `${grupo}-${idx}`, fase: `Grupo ${grupo}`, date: parseMatchDate(m.fecha, m.hora) });
     });
+  });
+  (matchesData.dieciseisavos || []).forEach((m, idx) => {
+    list.push({ ...m, grupo: 'D32', idx, id: `D32-${idx}`, fase: 'Dieciseisavos', date: parseMatchDate(m.fecha, m.hora) });
   });
   list.sort((a, b) => a.date - b.date);
   return list;
@@ -656,7 +662,7 @@ function renderMatchCard(m) {
 
   card.innerHTML = `
     <div class="match-card-header">
-      <span class="match-group-badge">Grupo ${grupo}</span>
+      <span class="match-group-badge">${m.fase || ('Grupo ' + grupo)}</span>
       <span class="match-time">${hora}</span>
       <span class="match-status-badge ${status.cls}" data-badge="${grupo}-${idx}">${status.label}</span>
     </div>

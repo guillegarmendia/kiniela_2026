@@ -456,5 +456,23 @@
         "hora": "23:00"
       }
     ]
-  }
+  },
+  "dieciseisavos": [
+    { "local": "Sudáfrica",      "visitante": "Canada",            "fecha": "28 jun", "hora": "21:00" },
+    { "local": "Brasil",         "visitante": "Japón",             "fecha": "29 jun", "hora": "19:00" },
+    { "local": "Alemania",       "visitante": "Paraguay",          "fecha": "29 jun", "hora": "22:30" },
+    { "local": "Países Bajos",   "visitante": "Marruecos",         "fecha": "30 jun", "hora": "03:00" },
+    { "local": "Costa de Marfil","visitante": "Noruega",           "fecha": "30 jun", "hora": "19:00" },
+    { "local": "Francia",        "visitante": "Suecia",            "fecha": "30 jun", "hora": "23:00" },
+    { "local": "México",         "visitante": "Ecuador",           "fecha": "1 jul",  "hora": "03:00" },
+    { "local": "Inglaterra",     "visitante": "R.D. del Congo",    "fecha": "1 jul",  "hora": "18:00" },
+    { "local": "Bélgica",        "visitante": "Senegal",           "fecha": "1 jul",  "hora": "22:00" },
+    { "local": "Estados Unidos", "visitante": "Bosnia Herzegovina","fecha": "2 jul",  "hora": "02:00" },
+    { "local": "España",         "visitante": "Austria",           "fecha": "2 jul",  "hora": "21:00" },
+    { "local": "Portugal",       "visitante": "Croacia",           "fecha": "3 jul",  "hora": "01:00" },
+    { "local": "Suiza",          "visitante": "Argelia",           "fecha": "3 jul",  "hora": "05:00" },
+    { "local": "Australia",      "visitante": "Egipto",            "fecha": "3 jul",  "hora": "20:00" },
+    { "local": "Argentina",      "visitante": "Cabo Verde",        "fecha": "4 jul",  "hora": "00:00" },
+    { "local": "Colombia",       "visitante": "Ghana",             "fecha": "4 jul",  "hora": "03:30" }
+  ]
 }
