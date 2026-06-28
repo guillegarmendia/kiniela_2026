@@ -727,7 +727,6 @@ function renderMatchCard(m) {
             <span>${labelText.length > 10 ? labelText.substring(0, 9) + '…' : labelText}</span>
           </button>`;
         }).join('')}
-        ${isKnockout ? '<span class="sign-no-draw-note">Sin empate</span>' : ''}
       </div>
 
       <!-- First scorer -->
