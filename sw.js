@@ -1,7 +1,7 @@
 // Service Worker — Kiniela Mundial 2026
 // Solo cachea el shell estático; las llamadas a Supabase van siempre a la red.
 
-const CACHE_NAME = 'kiniela-v1';
+const CACHE_NAME = 'kiniela-v2';
 const SHELL = [
   './index.html',
   './style.css',

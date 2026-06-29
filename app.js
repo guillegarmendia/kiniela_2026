@@ -263,10 +263,6 @@ async function loadSupabaseData() {
     };
   });
 
-  // Invalidar jugadoresCache para que recargue con los nuevos resultados
-  jugadoresCache    = null;
-  jugadoresGrpCache = null;
-
   // group_results
   groupResultsCache = {};
   (groupRes.data || []).forEach(r => {
@@ -596,6 +592,22 @@ function renderDashboard() {
 
 function renderPartidosTab() {
   renderDateTabs();
+  // Refresca resultados en segundo plano para mostrar el tick sin recargar la página
+  sb.from('match_results').select('*').then(({ data }) => {
+    if (!data) return;
+    const before = Object.keys(matchResultsCache).length;
+    matchResultsCache = {};
+    data.forEach(r => {
+      matchResultsCache[r.match_id] = {
+        golesLocal:     r.goles_local,
+        golesVisitante: r.goles_visitante,
+        firstScorer:    r.first_scorer,
+        mvp:            r.mvp    || '',
+        winner:         r.winner || ''
+      };
+    });
+    if (Object.keys(matchResultsCache).length !== before) renderDateTabs();
+  });
 }
 
 function renderDateTabs() {
@@ -1482,6 +1494,22 @@ function renderMisApuestasContent(matchPreds, groupPreds, specPreds) {
 function renderHistorico() {
   const el = document.getElementById('historico-list');
   if (!el) return;
+  // Refresca resultados en segundo plano
+  sb.from('match_results').select('*').then(({ data }) => {
+    if (!data) return;
+    const before = Object.keys(matchResultsCache).length;
+    matchResultsCache = {};
+    data.forEach(r => {
+      matchResultsCache[r.match_id] = {
+        golesLocal:     r.goles_local,
+        golesVisitante: r.goles_visitante,
+        firstScorer:    r.first_scorer,
+        mvp:            r.mvp    || '',
+        winner:         r.winner || ''
+      };
+    });
+    if (Object.keys(matchResultsCache).length !== before) renderHistorico();
+  });
 
   const finished = getAllMatchesSorted().filter(m => matchResultsCache[m.id]);
 
@@ -1495,7 +1523,7 @@ function renderHistorico() {
     return `
       <div class="hist-match-row" id="hist-row-${m.id}">
         <button class="hist-match-btn" onclick="toggleHistorico('${m.id}')">
-          <span class="hist-group-badge">Grupo ${m.grupo}</span>
+          <span class="hist-group-badge">${m.grupo === 'D32' ? 'Dieciseisavos' : 'Grupo ' + m.grupo}</span>
           <div class="hist-teams">
             <span>${flag(m.local)} ${m.local}</span>
             <strong class="hist-score">${result.golesLocal} – ${result.golesVisitante}</strong>
@@ -1640,9 +1668,6 @@ const SPECIAL_FIELDS = [
 
 // ── Jugadores Tab ────────────────────────────────────────────
 
-let jugadoresCache      = null; // { playerSlug: { matchId: predRow } }
-let jugadoresGrpCache   = null; // { playerSlug: { grupo: grpPredRow } }
-
 async function renderJugadoresTab() {
   const el = document.getElementById('jugadores-content');
   if (!el) return;
@@ -1654,25 +1679,23 @@ async function renderJugadoresTab() {
     return;
   }
 
-  // Cargar predicciones de partidos finalizados y de grupos en paralelo
-  if (!jugadoresCache || !jugadoresGrpCache) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando…</p></div>';
-    const matchIds = finished.map(m => m.id);
-    const [{ data: predData }, { data: grpData }] = await Promise.all([
-      sb.from('predictions').select('*').in('match_id', matchIds),
-      sb.from('group_predictions').select('*').eq('evaluated', true)
-    ]);
-    jugadoresCache = {};
-    (predData || []).forEach(r => {
-      if (!jugadoresCache[r.player_id]) jugadoresCache[r.player_id] = {};
-      jugadoresCache[r.player_id][r.match_id] = r;
-    });
-    jugadoresGrpCache = {};
-    (grpData || []).forEach(r => {
-      if (!jugadoresGrpCache[r.player_id]) jugadoresGrpCache[r.player_id] = {};
-      jugadoresGrpCache[r.player_id][r.grupo] = r;
-    });
-  }
+  // Siempre cargar datos frescos de Supabase para incluir los últimos resultados
+  el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando…</p></div>';
+  const matchIds = finished.map(m => m.id);
+  const [{ data: predData }, { data: grpData }] = await Promise.all([
+    sb.from('predictions').select('*').in('match_id', matchIds),
+    sb.from('group_predictions').select('*').eq('evaluated', true)
+  ]);
+  const jugadoresCache = {};
+  (predData || []).forEach(r => {
+    if (!jugadoresCache[r.player_id]) jugadoresCache[r.player_id] = {};
+    jugadoresCache[r.player_id][r.match_id] = r;
+  });
+  const jugadoresGrpCache = {};
+  (grpData || []).forEach(r => {
+    if (!jugadoresGrpCache[r.player_id]) jugadoresGrpCache[r.player_id] = {};
+    jugadoresGrpCache[r.player_id][r.grupo] = r;
+  });
 
   // Ordenar jugadores por puntos totales reales (partidos + grupos + especiales)
   const ranked = [...PLAYERS].sort((a, b) =>
@@ -2021,17 +2044,6 @@ async function main() {
   }
 
   bootApp();
-
-  // Auto-refresh cada 2 minutos para mostrar nuevos resultados sin recargar la página
-  setInterval(async () => {
-    try {
-      await loadSupabaseData();
-      // Re-renderizar la pestaña activa para reflejar datos frescos
-      switchTab(activeTab);
-    } catch (e) {
-      console.warn('Auto-refresh falló:', e);
-    }
-  }, 2 * 60 * 1000);
 }
 
 document.addEventListener('DOMContentLoaded', main);
