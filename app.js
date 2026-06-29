@@ -263,6 +263,10 @@ async function loadSupabaseData() {
     };
   });
 
+  // Invalidar jugadoresCache para que recargue con los nuevos resultados
+  jugadoresCache    = null;
+  jugadoresGrpCache = null;
+
   // group_results
   groupResultsCache = {};
   (groupRes.data || []).forEach(r => {
@@ -1152,7 +1156,8 @@ async function loadAndRenderApuestas(playerSlug) {
         sign: r.sign,
         golesLocal: r.goles_local,
         golesVisitante: r.goles_visitante,
-        firstScorer: r.first_scorer
+        firstScorer: r.first_scorer,
+        mvpPred: r.mvp_pred || null
       };
     });
 
@@ -2016,6 +2021,17 @@ async function main() {
   }
 
   bootApp();
+
+  // Auto-refresh cada 2 minutos para mostrar nuevos resultados sin recargar la página
+  setInterval(async () => {
+    try {
+      await loadSupabaseData();
+      // Re-renderizar la pestaña activa para reflejar datos frescos
+      switchTab(activeTab);
+    } catch (e) {
+      console.warn('Auto-refresh falló:', e);
+    }
+  }, 2 * 60 * 1000);
 }
 
 document.addEventListener('DOMContentLoaded', main);
