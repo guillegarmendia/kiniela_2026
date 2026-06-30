@@ -1672,6 +1672,31 @@ async function renderJugadoresTab() {
   const el = document.getElementById('jugadores-content');
   if (!el) return;
 
+  // Siempre cargar datos frescos de Supabase para incluir los últimos resultados (incl. dieciseisavos)
+  el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando…</p></div>';
+  const [matchRes, ptsRes] = await Promise.all([
+    sb.from('match_results').select('*'),
+    sb.from('player_points').select('*')
+  ]);
+  if (matchRes.data) {
+    matchResultsCache = {};
+    matchRes.data.forEach(r => {
+      matchResultsCache[r.match_id] = {
+        golesLocal:    r.goles_local,
+        golesVisitante: r.goles_visitante,
+        firstScorer:   r.first_scorer,
+        mvp:           r.mvp    || '',
+        winner:        r.winner || ''
+      };
+    });
+  }
+  if (ptsRes.data) {
+    playerPointsCache = {};
+    ptsRes.data.forEach(r => {
+      playerPointsCache[r.player_id] = { total: r.total || 0, special_total: r.special_total || 0 };
+    });
+  }
+
   const finished = getAllMatchesSorted().filter(m => matchResultsCache[m.id]);
 
   if (finished.length === 0) {
@@ -1679,8 +1704,6 @@ async function renderJugadoresTab() {
     return;
   }
 
-  // Siempre cargar datos frescos de Supabase para incluir los últimos resultados
-  el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando…</p></div>';
   const matchIds = finished.map(m => m.id);
   const [{ data: predData }, { data: grpData }] = await Promise.all([
     sb.from('predictions').select('*').in('match_id', matchIds),
