@@ -1796,7 +1796,7 @@ function toggleJugadorRow(slug) {
 let evolucionChart = null;
 
 async function renderEvolucionTab() {
-  const el = document.getElementById('evolucion-content');
+  const el = document.getElementById('historico-content');
   if (!el) return;
 
   el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando…</p></div>';
@@ -1899,12 +1899,12 @@ async function renderEvolucionTab() {
 
   el.innerHTML = `
     <div class="evolucion-chart-wrap">
-      <canvas id="evolucion-chart"></canvas>
+      <canvas id="historico-chart"></canvas>
     </div>
-    <div class="evolucion-legend" id="evolucion-legend"></div>
+    <div class="evolucion-legend" id="historico-legend"></div>
   `;
 
-  const legendEl = document.getElementById('evolucion-legend');
+  const legendEl = document.getElementById('historico-legend');
   legendEl.innerHTML = PLAYERS.map((name, i) => `
     <span class="evolucion-legend-item">
       <span class="evolucion-legend-dot" style="background:${PLAYER_COLORS[i]}"></span>
@@ -1914,7 +1914,7 @@ async function renderEvolucionTab() {
 
   if (evolucionChart) { evolucionChart.destroy(); evolucionChart = null; }
 
-  const ctx = document.getElementById('evolucion-chart').getContext('2d');
+  const ctx = document.getElementById('historico-chart').getContext('2d');
   evolucionChart = new Chart(ctx, {
     type: 'line',
     data: { labels, datasets },
