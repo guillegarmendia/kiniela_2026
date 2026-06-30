@@ -1910,28 +1910,7 @@ async function renderEvolucionTab() {
   }
 
   // End-of-line label plugin: draws player initial/short name at last data point
-  const endLabelPlugin = {
-    id: 'endLabels',
-    afterDatasetsDraw(chart) {
-      const { ctx: c } = chart;
-      chart.data.datasets.forEach((ds, i) => {
-        const meta = chart.getDatasetMeta(i);
-        const first = meta.data[0];
-        if (!first) return;
-        const shortName = ds.label.split(' ')[0];
-        const isSelected = selectedEvSlug && nameToSlug(ds.label) === selectedEvSlug;
-        const isActive = !selectedEvSlug || isSelected;
-        c.save();
-        c.font = isSelected ? 'bold 12px Inter, -apple-system, sans-serif' : '600 11px Inter, -apple-system, sans-serif';
-        c.fillStyle = ds.borderColor;
-        c.globalAlpha = isActive ? 1 : 0.25;
-        c.textAlign = 'right';
-        c.textBaseline = 'middle';
-        c.fillText(shortName, first.x - 6, first.y);
-        c.restore();
-      });
-    },
-  };
+  const endLabelPlugin = { id: 'endLabels' };
 
   // Chart canvas — fixed height, scrollable wrap if many points
   const minPx = Math.max(100, timeline.length * 14);
@@ -1956,7 +1935,7 @@ async function renderEvolucionTab() {
       maintainAspectRatio: false,
       animation: { duration: 200 },
       interaction: { mode: 'index', intersect: false },
-      layout: { padding: { left: 70, right: 16 } },
+      layout: { padding: { right: 16 } },
       scales: {
         y: {
           reverse: true,
