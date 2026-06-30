@@ -1144,6 +1144,19 @@ details[open] > .apuesta-accordion-summary .accordion-chevron { transform: rotat
 .hist-total-pts.has-pts { color: var(--accent); }
 
 /* ── Evolución Tab ── */
+.evolucion-scroll-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 8px 8px;
+}
+.evolucion-scroll-wrap::-webkit-scrollbar { height: 6px; }
+.evolucion-scroll-wrap::-webkit-scrollbar-track { background: var(--surface); border-radius: 3px; }
+.evolucion-scroll-wrap::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+.evolucion-scroll-wrap::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
 .evolucion-player-grid {
   display: flex; flex-wrap: wrap; gap: 8px;
   margin-top: 16px; padding: 0 4px;
