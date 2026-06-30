@@ -1379,3 +1379,54 @@ details[open] > .apuesta-accordion-summary .accordion-chevron {
   text-align: center;
   padding: 0 8px;
 }
+
+/* ── Evolución — rediseño interactivo ── */
+.evolucion-scroll-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 8px 8px;
+}
+
+.evolucion-player-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.evolucion-player-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  cursor: pointer;
+}
+
+.evolucion-player-btn.active {
+  border-color: currentColor;
+  color: var(--text);
+  background: var(--card);
+}
+
+.evolucion-btn-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.evolucion-btn-pos {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.7;
+}

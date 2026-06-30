@@ -1886,42 +1886,76 @@ async function renderEvolucionTab() {
 
   const labels = timeline.map(e => e.label);
 
-  const datasets = PLAYERS.map((name, i) => ({
-    label: name,
-    data: positionsPerPlayer[nameToSlug(name)],
-    borderColor: PLAYER_COLORS[i],
-    backgroundColor: PLAYER_COLORS[i],
-    tension: 0.3,
-    pointRadius: timeline.length <= 25 ? 4 : 2,
-    pointHoverRadius: 6,
-    borderWidth: 2,
-  }));
+  // Helper: build dataset style based on selected player
+  let selectedEvSlug = null;
 
+  function buildDatasets() {
+    return PLAYERS.map((name, i) => {
+      const slug = nameToSlug(name);
+      const isSelected = !selectedEvSlug || slug === selectedEvSlug;
+      return {
+        label: name,
+        data: positionsPerPlayer[slug],
+        borderColor: isSelected ? PLAYER_COLORS[i] : PLAYER_COLORS[i] + '28',
+        backgroundColor: PLAYER_COLORS[i],
+        tension: 0.3,
+        pointRadius: selectedEvSlug
+          ? (isSelected ? 4 : 0)
+          : (timeline.length <= 30 ? 3 : 1),
+        pointHoverRadius: isSelected ? 6 : 0,
+        borderWidth: selectedEvSlug ? (isSelected ? 3 : 1) : 1.5,
+        order: isSelected ? 0 : 1,
+      };
+    });
+  }
+
+  // End-of-line label plugin: draws player initial/short name at last data point
+  const endLabelPlugin = {
+    id: 'endLabels',
+    afterDatasetsDraw(chart) {
+      if (!selectedEvSlug) return;
+      const { ctx: c } = chart;
+      chart.data.datasets.forEach((ds, i) => {
+        if (nameToSlug(ds.label) !== selectedEvSlug) return;
+        const meta = chart.getDatasetMeta(i);
+        const last = meta.data[meta.data.length - 1];
+        if (!last) return;
+        const shortName = ds.label.split(' ')[0];
+        c.save();
+        c.font = 'bold 12px -apple-system, sans-serif';
+        c.fillStyle = ds.borderColor;
+        c.textAlign = 'left';
+        c.textBaseline = 'middle';
+        c.fillText(shortName, last.x + 6, last.y);
+        c.restore();
+      });
+    },
+  };
+
+  // Chart canvas — fixed height, scrollable wrap if many points
+  const minPx = Math.max(100, timeline.length * 14);
   el.innerHTML = `
-    <div class="evolucion-chart-wrap">
-      <canvas id="historico-chart"></canvas>
+    <div class="evolucion-scroll-wrap">
+      <div style="min-width:${minPx}px;height:300px;position:relative">
+        <canvas id="historico-chart"></canvas>
+      </div>
     </div>
-    <div class="evolucion-legend" id="historico-legend"></div>
+    <div class="evolucion-player-grid" id="historico-legend"></div>
+    <p class="evolucion-note">Toca un jugador para resaltar su línea · incluye partidos + bonus de grupos</p>
   `;
-
-  const legendEl = document.getElementById('historico-legend');
-  legendEl.innerHTML = PLAYERS.map((name, i) => `
-    <span class="evolucion-legend-item">
-      <span class="evolucion-legend-dot" style="background:${PLAYER_COLORS[i]}"></span>
-      ${name}
-    </span>
-  `).join('');
 
   if (evolucionChart) { evolucionChart.destroy(); evolucionChart = null; }
 
   const ctx = document.getElementById('historico-chart').getContext('2d');
   evolucionChart = new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets },
+    data: { labels, datasets: buildDatasets() },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 200 },
       interaction: { mode: 'index', intersect: false },
+      layout: { padding: { right: 70 } },
       scales: {
         y: {
           reverse: true,
@@ -1931,18 +1965,22 @@ async function renderEvolucionTab() {
           grid: { color: 'rgba(255,255,255,0.06)' },
         },
         x: {
-          ticks: { color: '#8892a4', font: { size: 11 } },
+          ticks: { color: '#8892a4', font: { size: 10 }, maxRotation: 0,
+            callback: (_, idx) => {
+              const e = timeline[idx];
+              return e.type === 'grupos' ? '📊' : e.label;
+            }
+          },
           grid: {
-            color: ctx2 => {
-              const label = labels[ctx2.index];
-              return label === 'Grupos' ? 'rgba(245,197,24,0.4)' : 'rgba(255,255,255,0.06)';
-            },
+            color: (ctx2) => labels[ctx2.index] === 'Grupos'
+              ? 'rgba(245,197,24,0.5)' : 'rgba(255,255,255,0.05)',
           },
         },
       },
       plugins: {
         legend: { display: false },
         tooltip: {
+          filter: item => !selectedEvSlug || nameToSlug(item.dataset.label) === selectedEvSlug,
           backgroundColor: '#1e2538',
           titleColor: '#e8eaf0',
           bodyColor: '#8892a4',
@@ -1952,21 +1990,43 @@ async function renderEvolucionTab() {
             title: items => {
               const idx = items[0].dataIndex;
               const event = timeline[idx];
-              if (event.type === 'grupos') return '📊 Fase de Grupos — bonus añadido (28 jun)';
+              if (event.type === 'grupos') return '📊 Fase de Grupos — bonus (28 jun)';
               const m = event.match;
-              return `${event.label}: ${m.local} vs ${m.visitante} (${m.fecha})`;
+              return `${event.label}: ${m.local} vs ${m.visitante}`;
             },
-            label: item => ` ${item.dataset.label}: #${item.raw}`,
-            afterBody: items => {
-              const idx = items[0].dataIndex;
-              const hSlug = nameToSlug(items[0].dataset.label);
-              return [`  ${cumulativeAtPoint[idx][hSlug]} pts acumulados`];
+            label: item => {
+              const slug = nameToSlug(item.dataset.label);
+              const cum = cumulativeAtPoint[item.dataIndex][slug];
+              return ` ${item.dataset.label}: #${item.raw}  (${cum} pts)`;
             },
           },
         },
       },
     },
+    plugins: [endLabelPlugin],
   });
+
+  // Interactive player buttons
+  const legendEl = document.getElementById('historico-legend');
+  legendEl.innerHTML = PLAYERS.map((name, i) => {
+    const slug = nameToSlug(name);
+    const lastPos = positionsPerPlayer[slug][positionsPerPlayer[slug].length - 1];
+    return `
+      <button class="evolucion-player-btn" data-slug="${slug}" onclick="selectEvolucionPlayer('${slug}')">
+        <span class="evolucion-legend-dot" style="background:${PLAYER_COLORS[i]}"></span>
+        <span class="evolucion-btn-name">${name}</span>
+        <span class="evolucion-btn-pos">#${lastPos}</span>
+      </button>`;
+  }).join('');
+
+  window.selectEvolucionPlayer = (slug) => {
+    selectedEvSlug = selectedEvSlug === slug ? null : slug;
+    evolucionChart.data.datasets = buildDatasets();
+    evolucionChart.update('none');
+    document.querySelectorAll('.evolucion-player-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.slug === selectedEvSlug);
+    });
+  };
 }
 
 // ── PIN modal ───────────────────────────────────────────────
