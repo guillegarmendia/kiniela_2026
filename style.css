@@ -888,6 +888,34 @@ details[open] > .apuesta-accordion-summary .accordion-chevron { transform: rotat
   }
 }
 
+/* ── Resultados accordion (dashboard) ── */
+.resultados-accordion {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.resultados-summary {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px; cursor: pointer; user-select: none;
+  background: var(--card); list-style: none;
+}
+.resultados-summary::-webkit-details-marker { display: none; }
+.resultados-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--text-muted);
+}
+.resultados-chevron {
+  font-size: 18px; color: var(--text-muted);
+  transition: transform 0.25s var(--spring);
+}
+.resultados-accordion[open] > .resultados-summary .resultados-chevron {
+  transform: rotate(90deg);
+}
+.resultados-accordion[open] > .resultados-summary {
+  border-bottom: 1px solid var(--border);
+}
+
 /* ── Histórico ── */
 .hist-match-row {
   background: var(--card); border: 1px solid var(--border);
