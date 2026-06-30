@@ -487,6 +487,7 @@ function switchTab(tabName) {
   if (tabName === 'apuestas')            renderApuestasTab();
   if (tabName === 'misapuestas')         renderMisApuestasTab();
   if (tabName === 'jugadores')           renderJugadoresTab();
+  if (tabName === 'historico')           renderEvolucionTab();
   if (tabName === 'especiales-ribinha')  renderEspecialesRibinhaTab();
 }
 
@@ -1788,6 +1789,184 @@ function toggleJugadorRow(slug) {
   const isOpen = !detail.classList.contains('hidden');
   detail.classList.toggle('hidden', isOpen);
   if (chevron) chevron.textContent = isOpen ? '›' : '↓';
+}
+
+// ── Evolución Tab ────────────────────────────────────────────
+
+let evolucionChart = null;
+
+async function renderEvolucionTab() {
+  const el = document.getElementById('evolucion-content');
+  if (!el) return;
+
+  el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><p>Cargando…</p></div>';
+
+  // Refresh match_results cache
+  const { data: matchData } = await sb.from('match_results').select('*');
+  if (matchData) {
+    matchResultsCache = {};
+    matchData.forEach(r => {
+      matchResultsCache[r.match_id] = {
+        golesLocal:     r.goles_local,
+        golesVisitante: r.goles_visitante,
+        firstScorer:    r.first_scorer,
+        mvp:            r.mvp    || '',
+        winner:         r.winner || ''
+      };
+    });
+  }
+
+  const finished = getAllMatchesSorted().filter(m => matchResultsCache[m.id]);
+
+  if (finished.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>Aún no hay partidos finalizados</p></div>';
+    return;
+  }
+
+  // Fetch match predictions and evaluated group predictions in parallel
+  const [{ data: predData }, { data: grpData }] = await Promise.all([
+    sb.from('predictions').select('player_id,match_id,points').in('match_id', finished.map(m => m.id)),
+    sb.from('group_predictions').select('player_id,points').eq('evaluated', true)
+  ]);
+
+  // Build match points map: { playerSlug: { matchId: pts } }
+  const pointsMap = {};
+  PLAYERS.forEach(p => { pointsMap[nameToSlug(p)] = {}; });
+  (predData || []).forEach(r => {
+    if (pointsMap[r.player_id] !== undefined) {
+      pointsMap[r.player_id][r.match_id] = r.points?.total || 0;
+    }
+  });
+
+  // Sum group bonus points per player (all evaluated groups)
+  const groupBonus = {};
+  PLAYERS.forEach(p => { groupBonus[nameToSlug(p)] = 0; });
+  (grpData || []).forEach(r => {
+    if (groupBonus[r.player_id] !== undefined) {
+      groupBonus[r.player_id] += r.points?.total || 0;
+    }
+  });
+
+  // Build timeline: match events + a "Grupos" checkpoint inserted before the first 28-jun match
+  const timeline = [];
+  let gruposInserted = false;
+  let matchCounter = 0;
+  finished.forEach(m => {
+    if (!gruposInserted && m.fecha === '28 jun') {
+      timeline.push({ type: 'grupos', label: 'Grupos' });
+      gruposInserted = true;
+    }
+    matchCounter++;
+    timeline.push({ type: 'match', match: m, label: `P${matchCounter}` });
+  });
+
+  // Compute cumulative totals and positions across the full timeline
+  const runningTotals = {};
+  PLAYERS.forEach(p => { runningTotals[nameToSlug(p)] = 0; });
+
+  const positionsPerPlayer = {};
+  PLAYERS.forEach(p => { positionsPerPlayer[nameToSlug(p)] = []; });
+
+  const cumulativeAtPoint = []; // snapshot of totals at each timeline index
+
+  timeline.forEach(event => {
+    if (event.type === 'grupos') {
+      PLAYERS.forEach(p => { runningTotals[nameToSlug(p)] += groupBonus[nameToSlug(p)]; });
+    } else {
+      PLAYERS.forEach(p => {
+        const slug = nameToSlug(p);
+        runningTotals[slug] += pointsMap[slug][event.match.id] || 0;
+      });
+    }
+    cumulativeAtPoint.push({ ...runningTotals });
+    const sorted = [...PLAYERS].map(p => nameToSlug(p))
+      .sort((a, b) => runningTotals[b] - runningTotals[a]);
+    sorted.forEach((slug, idx) => { positionsPerPlayer[slug].push(idx + 1); });
+  });
+
+  const labels = timeline.map(e => e.label);
+
+  const datasets = PLAYERS.map((name, i) => ({
+    label: name,
+    data: positionsPerPlayer[nameToSlug(name)],
+    borderColor: PLAYER_COLORS[i],
+    backgroundColor: PLAYER_COLORS[i],
+    tension: 0.3,
+    pointRadius: timeline.length <= 25 ? 4 : 2,
+    pointHoverRadius: 6,
+    borderWidth: 2,
+  }));
+
+  el.innerHTML = `
+    <div class="evolucion-chart-wrap">
+      <canvas id="evolucion-chart"></canvas>
+    </div>
+    <div class="evolucion-legend" id="evolucion-legend"></div>
+  `;
+
+  const legendEl = document.getElementById('evolucion-legend');
+  legendEl.innerHTML = PLAYERS.map((name, i) => `
+    <span class="evolucion-legend-item">
+      <span class="evolucion-legend-dot" style="background:${PLAYER_COLORS[i]}"></span>
+      ${name}
+    </span>
+  `).join('');
+
+  if (evolucionChart) { evolucionChart.destroy(); evolucionChart = null; }
+
+  const ctx = document.getElementById('evolucion-chart').getContext('2d');
+  evolucionChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: {
+          reverse: true,
+          min: 1,
+          max: PLAYERS.length,
+          ticks: { stepSize: 1, color: '#8892a4', callback: v => `#${v}` },
+          grid: { color: 'rgba(255,255,255,0.06)' },
+        },
+        x: {
+          ticks: { color: '#8892a4', font: { size: 11 } },
+          grid: {
+            color: ctx2 => {
+              const label = labels[ctx2.index];
+              return label === 'Grupos' ? 'rgba(245,197,24,0.4)' : 'rgba(255,255,255,0.06)';
+            },
+          },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#1e2538',
+          titleColor: '#e8eaf0',
+          bodyColor: '#8892a4',
+          borderColor: '#2a3348',
+          borderWidth: 1,
+          callbacks: {
+            title: items => {
+              const idx = items[0].dataIndex;
+              const event = timeline[idx];
+              if (event.type === 'grupos') return '📊 Fase de Grupos — bonus añadido (28 jun)';
+              const m = event.match;
+              return `${event.label}: ${m.local} vs ${m.visitante} (${m.fecha})`;
+            },
+            label: item => ` ${item.dataset.label}: #${item.raw}`,
+            afterBody: items => {
+              const idx = items[0].dataIndex;
+              const hSlug = nameToSlug(items[0].dataset.label);
+              return [`  ${cumulativeAtPoint[idx][hSlug]} pts acumulados`];
+            },
+          },
+        },
+      },
+    },
+  });
 }
 
 // ── PIN modal ───────────────────────────────────────────────
