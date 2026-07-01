@@ -193,13 +193,19 @@ function getMatchLockStatus(fecha, hora, matchId) {
 
   const kickoff = parseMatchDate(fecha, hora);
   const now = nowInMadrid();
-  const diffMs = kickoff - now;
 
-  if (now >= kickoff) return { locked: true, label: '🔒 Cerrado', cls: 'badge-closed' };
+  // Guishermo Casadinho extended deadline for Inglaterra vs Congo
+  const effectiveDeadline = (currentPlayerSlug === 'guishermo-casadinho' && fecha === '1 jul' && hora === '18:00')
+    ? GUISHERMO_INGLATERRA_CONGO_DEADLINE
+    : kickoff;
+
+  const diffMs = effectiveDeadline - now;
+
+  if (now >= effectiveDeadline) return { locked: true, label: '🔒 Cerrado', cls: 'badge-closed' };
 
   if (diffMs < 2 * 3600 * 1000) {
     const cd = msToCountdown(diffMs);
-    return { locked: false, label: `⏱ Cierra en ${cd}`, cls: 'badge-soon', live: true, lockTime: kickoff };
+    return { locked: false, label: `⏱ Cierra en ${cd}`, cls: 'badge-soon', live: true, lockTime: effectiveDeadline };
   }
 
   return { locked: false, label: '🟢 Abierto', cls: 'badge-open' };
