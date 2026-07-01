@@ -147,7 +147,7 @@ function parseMatchDate(fecha, hora) {
   return new Date(2026, month, day, h, m, 0);
 }
 
-const GUISHERMO_INGLATERRA_CONGO_DEADLINE = new Date(2026, 6, 1, 20, 20, 0); // 1 jul 20:20 Madrid
+const GUISHERMO_INGLATERRA_CONGO_DEADLINE = new Date(2026, 6, 1, 20, 23, 0); // 1 jul 20:20 Madrid
 
 function isMatchLocked(fecha, hora) {
   if (currentPlayerSlug === 'guishermo-casadinho' && fecha === '1 jul' && hora === '18:00') {
